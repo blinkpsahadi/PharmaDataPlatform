@@ -4,13 +4,29 @@ import sqlite3
 import plotly.express as px
 from datetime import datetime
 
+# =========================
+# 🔒 Authentification simple
+# =========================
+st.set_page_config(page_title="Pharma Data Platform", page_icon="💊", layout="wide")
 
-DB_PATH = "data/all_pharma.db"  # base contenant PillPilot + Rosheta
+username = st.text_input("Nom d'utilisateur")
+password = st.text_input("Mot de passe", type="password")
+
+# Dictionnaire des utilisateurs autorisés
+USERS = {
+    "admin": "monMDPsecret",
+    "user1": "motdepasse1"
+}
+
+# Vérifier les identifiants
+if username not in USERS or password != USERS[username]:
+    st.warning("Identifiant ou mot de passe incorrect")
+    st.stop()  # Stoppe l'exécution si login incorrect
 
 # =========================
 # Connexion DB + utilitaires
 # =========================
-st.set_page_config(page_title="Pharma Data Platform", page_icon="💊", layout="wide")
+DB_PATH = "data/all_pharma.db"  # base contenant PillPilot + Rosheta
 
 def get_connection():
     return sqlite3.connect(DB_PATH)
@@ -109,7 +125,7 @@ elif menu == "📊 Dashboard":
             st.plotly_chart(fig, use_container_width=True)
 
     # Pie chart pour les classes thérapeutiques
-    if "type" in df.columns:  # ou 'therapeutic_class' si ta colonne s'appelle ainsi
+    if "type" in df.columns:
         fig_class = px.pie(df, names="type", title="Répartition des classes thérapeutiques")
         st.plotly_chart(fig_class, use_container_width=True)
 
@@ -121,6 +137,7 @@ elif menu == "📊 Dashboard":
 
         fig = px.histogram(df, x="Prix_num", nbins=20, title="Distribution des Prix")
         st.plotly_chart(fig, use_container_width=True)
+
 
 
 
