@@ -4,6 +4,17 @@ import sqlite3
 import plotly.express as px
 from datetime import datetime
 
+# ========================
+# 🔒 Authentification simple
+# ========================
+username = st.text_input("Nom d'utilisateur")
+password = st.text_input("Mot de passe", type="password")
+
+# Vérifier les identifiants
+if username != "admin" or password != "monMDPsecret":
+    st.warning("Identifiant ou mot de passe incorrect")
+    st.stop()  # Stoppe l'exécution de l'app si login incorrect
+
 DB_PATH = "data/all_pharma.db"  # base contenant PillPilot + Rosheta
 
 # =========================
@@ -120,3 +131,4 @@ elif menu == "📊 Dashboard":
 
         fig = px.histogram(df, x="Prix_num", nbins=20, title="Distribution des Prix")
         st.plotly_chart(fig, use_container_width=True)
+
