@@ -5,7 +5,6 @@ import plotly.express as px
 from datetime import datetime
 
 # === Authentification (mettez ça tout en haut de app.py) ===
-import streamlit as st
 import hashlib
 
 # Récupérer le dict d'utilisateurs hachés (ou fallback vers dict en dur si pas configuré)
@@ -56,7 +55,7 @@ else:
     if st.sidebar.button("🔓 Se déconnecter"):
         st.session_state.authenticated = False
         st.session_state.username = ""
-        st.experimental_rerun()
+        st.rerun()
 # === fin bloc authentification ===
 # =========================
 # Connexion DB + utilitaires
@@ -172,6 +171,7 @@ elif menu == "📊 Dashboard":
 
         fig = px.histogram(df, x="Prix_num", nbins=20, title="Distribution des Prix")
         st.plotly_chart(fig, use_container_width=True)
+
 
 
 
