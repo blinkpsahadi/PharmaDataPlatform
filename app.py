@@ -8,12 +8,6 @@ from datetime import datetime
 import streamlit as st
 import hashlib
 
-# --- Exemple d'utilisation sécurisée : mots de passe hachés dans st.secrets (recommandé) ---
-# Dans Streamlit Cloud / secrets.toml :
-# [credentials]
-# admin = "ef797c8118f02dfb6491e5c6b8e0b2e8..."  # sha256("monMDPsecret")
-# user1 = "..." 
-
 # Récupérer le dict d'utilisateurs hachés (ou fallback vers dict en dur si pas configuré)
 USERS_HASHED = {}
 if "credentials" in st.secrets:
@@ -51,7 +45,7 @@ if not st.session_state.authenticated:
                 st.session_state.username = user
                 st.success(f"Bienvenue {user} !")
                 # rafraîchir la page pour que le reste de l'app s'affiche sans le formulaire
-                st.experimental_rerun()
+                st.rerun()
             else:
                 st.error("Identifiant ou mot de passe incorrect")
     # stopper l'exécution pour être sûr que le reste n'apparaisse pas
@@ -178,6 +172,7 @@ elif menu == "📊 Dashboard":
 
         fig = px.histogram(df, x="Prix_num", nbins=20, title="Distribution des Prix")
         st.plotly_chart(fig, use_container_width=True)
+
 
 
 
