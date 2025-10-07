@@ -4,59 +4,56 @@ import sqlite3
 import plotly.express as px
 from datetime import datetime
 
-# === Authentification (mettez ça tout en haut de app.py) ===
-import hashlib
+# === Authentification (à placer tout en haut de app.py) ===
+import streamlit as st
 
-# Récupérer le dict d'utilisateurs hachés (ou fallback vers dict en dur si pas configuré)
-USERS_HASHED = {}
-if "credentials" in st.secrets:
-    USERS_HASHED = dict(st.secrets["credentials"])
-else:
-    # fallback (pour dev local seulement) — remplace par des SHA256 réels
-    USERS_HASHED = {
-        "admin": hashlib.sha256("monMDPsecret".encode()).hexdigest(),
-        "user1": hashlib.sha256("motdepasse1".encode()).hexdigest()
-    }
+# Charger les identifiants depuis les "Secrets" Streamlit
+CREDENTIALS = dict(st.secrets.get("credentials", {}))
 
-# Initialize session state
+# Si aucun identifiant n’est configuré
+if not CREDENTIALS:
+    st.error("⚠️ Aucun identifiant configuré dans Streamlit Secrets.")
+    st.stop()
+
+# Initialisation de la session
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "username" not in st.session_state:
     st.session_state.username = ""
 
 def check_password(username, password):
-    """Compare sha256(password) avec la valeur hachée enregistrée."""
-    if username not in USERS_HASHED:
-        return False
-    hashed_input = hashlib.sha256(password.encode()).hexdigest()
-    return hashed_input == USERS_HASHED.get(username)
+    """Vérifie si le nom d'utilisateur et le mot de passe sont corrects."""
+    return username in CREDENTIALS and CREDENTIALS[username] == password
 
-# Si pas encore authentifié -> afficher le formulaire
+# Formulaire de connexion (affiché seulement si non authentifié)
 if not st.session_state.authenticated:
     with st.form("login_form", clear_on_submit=False):
-        st.markdown("## 🔒 Connexion")
+        st.markdown("## 🔒 Connexion sécurisée")
         user = st.text_input("Nom d'utilisateur")
         pwd = st.text_input("Mot de passe", type="password")
         submitted = st.form_submit_button("Se connecter")
+
         if submitted:
             if check_password(user, pwd):
                 st.session_state.authenticated = True
                 st.session_state.username = user
-                st.success(f"Bienvenue {user} !")
-                # rafraîchir la page pour que le reste de l'app s'affiche sans le formulaire
-                st.rerun()
+                st.success(f"Bienvenue {user} 👋")
+                st.rerun()  # recharge la page pour cacher le formulaire
             else:
-                st.error("Identifiant ou mot de passe incorrect")
-    # stopper l'exécution pour être sûr que le reste n'apparaisse pas
+                st.error("❌ Identifiant ou mot de passe incorrect")
+
+    # Stoppe l’exécution ici si non connecté
     st.stop()
-else:
-    # authentifié -> afficher qui est connecté et bouton logout dans la barre latérale
-    st.sidebar.markdown(f"**Connecté en tant que :** {st.session_state.username}")
-    if st.sidebar.button("🔓 Se déconnecter"):
-        st.session_state.authenticated = False
-        st.session_state.username = ""
-        st.rerun()
-# === fin bloc authentification ===
+
+# Si connecté, affichage dans la sidebar + option de déconnexion
+st.sidebar.markdown(f"👤 Connecté en tant que **{st.session_state.username}**")
+if st.sidebar.button("🔓 Se déconnecter"):
+    st.session_state.authenticated = False
+    st.session_state.username = ""
+    st.rerun()
+
+# === Fin du bloc d’authentification ===
+
 # =========================
 # Connexion DB + utilitaires
 # =========================
@@ -171,6 +168,7 @@ elif menu == "📊 Dashboard":
 
         fig = px.histogram(df, x="Prix_num", nbins=20, title="Distribution des Prix")
         st.plotly_chart(fig, use_container_width=True)
+
 
 
 
