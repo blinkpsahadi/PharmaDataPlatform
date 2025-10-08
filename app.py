@@ -42,141 +42,95 @@ else:
         st.rerun()
 
 # =========================
-# 🔧 FONCTIONS UTILES
+# 📦 FONCTIONS
 # =========================
+
+@st.cache_data
+def get_db_path():
+    """Retourne le chemin absolu vers la base de données, même en déploiement."""
+    possible_paths = [
+        os.path.join(os.path.dirname(__file__), "data", "all_pharma.db"),
+        os.path.join("data", "all_pharma.db"),
+        "all_pharma.db"
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    st.error("❌ Base de données introuvable. Assurez-vous que 'data/all_pharma.db' existe.")
+    st.stop()
+
 @st.cache_data
 def load_data():
-    # Déterminer le chemin du fichier SQLite (dossier "data")
-    db_path = os.path.join(os.path.dirname(__file__), "data", "all_pharma.db")
-
-    # Vérifier que la base existe
-    if not os.path.exists(db_path):
-        st.error(f"⚠️ Base de données introuvable : {db_path}")
-        return pd.DataFrame()
-
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
     try:
-        conn = sqlite3.connect(db_path)
-        # Vérifier si la table 'drugs' existe
-        tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
-        if "drugs" not in tables["name"].values:
-            st.error("⚠️ La table 'drugs' est absente de la base.")
-            st.dataframe(tables)  # Montre les tables disponibles pour débogage
-            conn.close()
-            return pd.DataFrame()
-
-        # Charger la table drugs
-        df = pd.read_sql("SELECT * FROM drugs;", conn)
-        conn.close()
-
-        if df.empty:
-            st.warning("La table 'drugs' est vide.")
-        else:
-            st.success(f"✅ Base chargée ({len(df)} enregistrements)")
-
-        return df
-
+        df = pd.read_sql_query("SELECT * FROM drugs", conn)
     except Exception as e:
-        st.error(f"❌ Erreur lors du chargement de la base : {e}")
-        return pd.DataFrame()
+        st.error(f"Erreur lors du chargement de la table 'drugs' : {e}")
+        st.stop()
+    finally:
+        conn.close()
+    return df
 
 def extraire_prix(val):
     try:
-        if isinstance(val, str):
-            val = val.replace("DA", "").replace(",", ".").strip()
+        if pd.isna(val):
+            return None
+        val = str(val).replace("DA", "").replace(",", ".").strip()
         return float(val)
     except:
         return None
 
-def init_observation_table():
-    conn = sqlite3.connect("all_pharma.db")
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS observations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            drug_name TEXT,
-            type TEXT,
-            commentaire TEXT,
-            auteur TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-def get_observations():
-    conn = sqlite3.connect("all_pharma.db")
-    df_obs = pd.read_sql_query("SELECT * FROM observations", conn)
-    conn.close()
-    return df_obs
-
-def add_observation(drug_name, type_obs, commentaire, auteur):
-    conn = sqlite3.connect("all_pharma.db")
-    conn.execute("INSERT INTO observations (drug_name, type, commentaire, auteur) VALUES (?, ?, ?, ?)",
-                 (drug_name, type_obs, commentaire, auteur))
-    conn.commit()
-    conn.close()
-
-def update_observation(obs_id, commentaire):
-    conn = sqlite3.connect("all_pharma.db")
-    conn.execute("UPDATE observations SET commentaire = ? WHERE id = ?", (commentaire, obs_id))
-    conn.commit()
-    conn.close()
-
-def delete_observation(obs_id):
-    conn = sqlite3.connect("all_pharma.db")
-    conn.execute("DELETE FROM observations WHERE id = ?", (obs_id,))
-    conn.commit()
-    conn.close()
-
-# Initialisation si nécessaire
-init_observation_table()
-
 # =========================
-# 🧭 NAVIGATION
+# 🧭 BARRE LATÉRALE
 # =========================
-st.sidebar.title("📚 Navigation")
 menu = st.sidebar.radio(
-    "Aller à :", 
-    ["💊 Médicaments", "📊 Dashboard", "🗒️ Observations"]
+    "Navigation",
+    ["🏠 Accueil", "💊 Produits", "📊 Dashboard", "🧾 Observations", "🚪 Déconnexion"]
 )
 
+if menu == "🚪 Déconnexion":
+    st.session_state.authenticated = False
+    st.rerun()
+
 # =========================
-# 💊 MÉDICAMENTS
+# 🏠 ACCUEIL
 # =========================
-if menu == "💊 Médicaments":
-    st.header("💊 Liste des Médicaments")
+if menu == "🏠 Accueil":
+    st.title("💊 Pharma Data Platform")
+    st.markdown("Bienvenue sur la plateforme d’analyse et de gestion pharmaceutique 📊")
+
+# =========================
+# 💊 PRODUITS
+# =========================
+elif menu == "💊 Produits":
+    st.header("💊 Liste des produits (base Rosheta + PillPilot)")
+
     df = load_data()
 
-    search_term = st.text_input("🔍 Rechercher un médicament :")
-    if search_term:
-        df = df[df["name"].str.contains(search_term, case=False, na=False)]
+    # Recherche
+    search = st.text_input("🔍 Rechercher un produit par nom, substance ou classe thérapeutique")
 
+    if search:
+        df = df[df["name"].str.contains(search, case=False, na=False) |
+                df["type"].str.contains(search, case=False, na=False)]
+
+    # Pagination
     items_per_page = 100
-    total_pages = max(1, (len(df) - 1) // items_per_page + 1)
-    page = st.number_input("Page :", min_value=1, max_value=total_pages, step=1)
+    total_pages = (len(df) // items_per_page) + 1
+    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1)
+    start, end = (page - 1) * items_per_page, page * items_per_page
+    subset = df.iloc[start:end]
 
-    start = (page - 1) * items_per_page
-    end = start + items_per_page
-    df_page = df.iloc[start:end]
-
-    st.write(f"Affichage des médicaments {start+1} à {min(end, len(df))} sur {len(df)}")
-
-    for _, row in df_page.iterrows():
-        with st.container():
-            st.markdown(f"### 🧪 {row['name']}")
-            if pd.notna(row.get("price")):
-                st.markdown(f"💰 **Prix :** {row['price']}")
-            if pd.notna(row.get("type")):
-                st.markdown(f"🏷️ **Classe thérapeutique :** {row['type']}")
-            if pd.notna(row.get("atc")):
-                st.markdown(f"🧬 **ATC :** {row['atc']}")
-            if pd.notna(row.get("bcs")):
-                st.markdown(f"📘 **BCS :** {row['bcs']}")
-            if pd.notna(row.get("bioequivalence")):
-                st.markdown(f"⚗️ **Bioéquivalence :** {row['bioequivalence']}")
-            if pd.notna(row.get("oeb")):
-                st.markdown(f"🧫 **OEB :** {row['oeb']}")
-            if pd.notna(row.get("description")):
-                st.markdown("<hr>", unsafe_allow_html=True)
-                st.markdown(f"{row['description']}", unsafe_allow_html=True)
+    # Affichage des produits
+    for _, row in subset.iterrows():
+        with st.expander(f"💊 {row['name']}"):
+            st.markdown(f"**ATC :** {row.get('atc', 'N/A')}")
+            st.markdown(f"**Type :** {row.get('type', 'N/A')}")
+            st.markdown(f"**Prix :** {row.get('price', 'N/A')}")
+            if 'description' in df.columns and row.get("description"):
+                st.markdown("**Description :**", unsafe_allow_html=True)
+                st.markdown(row["description"], unsafe_allow_html=True)
             st.markdown("---")
 
 # =========================
@@ -205,44 +159,42 @@ elif menu == "📊 Dashboard":
         st.plotly_chart(fig, use_container_width=True)
 
 # =========================
-# 🗒️ OBSERVATIONS
+# 🧾 OBSERVATIONS
 # =========================
-elif menu == "🗒️ Observations":
-    st.header("🗒️ Observations Médicales & Commerciales")
+elif menu == "🧾 Observations":
+    st.header("🧾 Observations Commerciales & Médicales")
 
-    df_obs = get_observations()
-    df_drugs = load_data()
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            categorie TEXT,
+            produit TEXT,
+            observation TEXT
+        )
+    """)
 
-    with st.expander("➕ Ajouter une nouvelle observation"):
-        col1, col2 = st.columns(2)
-        with col1:
-            drug = st.selectbox("Médicament :", sorted(df_drugs["name"].unique()))
-        with col2:
-            type_obs = st.selectbox("Type :", ["Commerciale", "Médicale"])
+    with st.form("observation_form"):
+        categorie = st.selectbox("Catégorie", ["Commerciale", "Médicale"])
+        produit = st.text_input("Produit concerné")
+        observation = st.text_area("Observation")
+        submit = st.form_submit_button("💾 Enregistrer")
 
-        commentaire = st.text_area("Observation :", "")
-        if st.button("💾 Enregistrer l’observation"):
-            add_observation(drug, type_obs, commentaire, st.session_state.username)
+        if submit and produit and observation:
+            conn.execute(
+                "INSERT INTO observations (categorie, produit, observation) VALUES (?, ?, ?)",
+                (categorie, produit, observation)
+            )
+            conn.commit()
             st.success("Observation enregistrée ✅")
-            st.rerun()
 
-    st.markdown("### 📋 Liste des observations existantes")
+    # Liste des observations
+    df_obs = pd.read_sql_query("SELECT * FROM observations", conn)
+    conn.close()
 
     if not df_obs.empty:
+        st.subheader("📋 Liste des observations")
         for _, row in df_obs.iterrows():
-            with st.expander(f"💊 {row['drug_name']} — {row['type']} par {row['auteur']}"):
-                new_comment = st.text_area("Modifier le commentaire :", row["commentaire"], key=f"edit_{row['id']}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button("✅ Sauvegarder", key=f"save_{row['id']}"):
-                        update_observation(row["id"], new_comment)
-                        st.success("Observation mise à jour ✅")
-                        st.rerun()
-                with col2:
-                    if st.button("🗑️ Supprimer", key=f"del_{row['id']}"):
-                        delete_observation(row["id"])
-                        st.warning("Observation supprimée 🗑️")
-                        st.rerun()
-    else:
-        st.info("Aucune observation enregistrée pour le moment.")
-
+            with st.expander(f"{row['categorie']} - {row['produit']}"):
+                st.write(row['observation'])
