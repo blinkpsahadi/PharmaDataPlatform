@@ -170,6 +170,125 @@ elif menu == "📊 Dashboard":
 # =========================
 # 🧾 OBSERVATIONS
 # =========================
+import streamlit as st
+import sqlite3
+import pandas as pd
+
+# =========================
+# 🔍 FONCTIONS UTILITAIRES
+# =========================
+def init_db():
+    """Créer la table des observations si elle n'existe pas."""
+    conn = sqlite3.connect("data/all_pharma.db")
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS observations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            product_name TEXT,
+            type TEXT,
+            comment TEXT,
+            date TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def load_observations():
+    """Charger toutes les observations enregistrées."""
+    conn = sqlite3.connect("data/all_pharma.db")
+    df = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
+    conn.close()
+    return df
+
+def get_all_products():
+    """Charger les noms des produits depuis la table drugs."""
+    conn = sqlite3.connect("data/all_pharma.db")
+    try:
+        df = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name ASC", conn)
+        conn.close()
+        return df["name"].tolist()
+    except Exception:
+        conn.close()
+        return []
+
+def add_observation(product, obs_type, comment):
+    """Insérer une nouvelle observation."""
+    conn = sqlite3.connect("data/all_pharma.db")
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
+        (product, obs_type, comment)
+    )
+    conn.commit()
+    conn.close()
+
+def delete_observation(obs_id):
+    """Supprimer une observation."""
+    conn = sqlite3.connect("data/all_pharma.db")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM observations WHERE id = ?", (obs_id,))
+    conn.commit()
+    conn.close()
+
+
+# =========================
+# 💬 SECTION STREAMLIT
+# =========================
+def render_observations_section():
+    st.header("🩺 Commercial & Medical Observations")
+
+    init_db()  # s'assurer que la table existe
+
+    # Liste déroulante des produits
+    products = get_all_products()
+    st.subheader("Add a new observation")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        selected_product = st.selectbox(
+            "Choose or Type a product",
+            options=["Type..."] + products,
+            index=0
+        )
+    with col2:
+        obs_type = st.selectbox("Type of observation", ["Commercial", "Medical", "Other"])
+
+    if selected_product == "Type...":
+        product_name = st.text_input("Nom du produit")
+    else:
+        product_name = selected_product
+
+    comment = st.text_area("💬 observation's details")
+
+    if st.button("💾 Save observation"):
+        if product_name.strip() == "" or comment.strip() == "":
+            st.warning("Please add the product's name and a comment.")
+        else:
+            add_observation(product_name.strip(), obs_type, comment.strip())
+            st.success(f"Observation added for **{product_name}**.")
+            st.rerun()
+
+    st.markdown("---")
+    st.subheader("📜 History of Observations")
+
+    df_obs = load_observations()
+    if df_obs.empty:
+        st.info("No observation saved for the moment.")
+    else:
+        st.dataframe(df_obs, use_container_width=True)
+
+        # Option de suppression
+        obs_to_delete = st.selectbox(
+            "🗑️ Delete observation",
+            options=[""] + [f"{r['id']} - {r['product_name']} ({r['type']})" for _, r in df_obs.iterrows()]
+        )
+        if obs_to_delete:
+            obs_id = int(obs_to_delete.split(" - ")[0])
+            if st.button("Confirm suppression"):
+                delete_observation(obs_id)
+                st.success("Observation Deleted Successfully.")
+                st.rerun()
+
 elif menu == "🧾 Observations":
     st.header("🧾 Medical and Commercial Observations")
 
@@ -207,6 +326,7 @@ elif menu == "🧾 Observations":
         for _, row in df_obs.iterrows():
             with st.expander(f"{row['categorie']} - {row['produit']}"):
                 st.write(row['observation'])
+
 
 
 
