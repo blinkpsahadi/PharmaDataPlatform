@@ -4,6 +4,18 @@ import sqlite3
 import plotly.express as px
 import os
 
+st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
+st.markdown("""
+    <style>
+    /* Hide the "View source" GitHub banner */
+    [data-testid="stToolbar"] {
+        visibility: hidden;
+        height: 0;
+        position: fixed;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 # =========================
 # 🔐 AUTHENTIFICATION
 # =========================
@@ -292,3 +304,4 @@ elif menu == "🧾 Observations":
                         delete_observation(row['id'])
                         st.warning("Observation deleted ❌")
                         st.rerun()
+
