@@ -46,10 +46,38 @@ else:
 # =========================
 @st.cache_data
 def load_data():
-    conn = sqlite3.connect("all_pharma.db")
-    df = pd.read_sql_query("SELECT * FROM drugs", conn)
-    conn.close()
-    return df
+    # Déterminer le chemin du fichier SQLite (dossier "data")
+    db_path = os.path.join(os.path.dirname(__file__), "data", "all_pharma.db")
+
+    # Vérifier que la base existe
+    if not os.path.exists(db_path):
+        st.error(f"⚠️ Base de données introuvable : {db_path}")
+        return pd.DataFrame()
+
+    try:
+        conn = sqlite3.connect(db_path)
+        # Vérifier si la table 'drugs' existe
+        tables = pd.read_sql("SELECT name FROM sqlite_master WHERE type='table';", conn)
+        if "drugs" not in tables["name"].values:
+            st.error("⚠️ La table 'drugs' est absente de la base.")
+            st.dataframe(tables)  # Montre les tables disponibles pour débogage
+            conn.close()
+            return pd.DataFrame()
+
+        # Charger la table drugs
+        df = pd.read_sql("SELECT * FROM drugs;", conn)
+        conn.close()
+
+        if df.empty:
+            st.warning("La table 'drugs' est vide.")
+        else:
+            st.success(f"✅ Base chargée ({len(df)} enregistrements)")
+
+        return df
+
+    except Exception as e:
+        st.error(f"❌ Erreur lors du chargement de la base : {e}")
+        return pd.DataFrame()
 
 def extraire_prix(val):
     try:
@@ -217,3 +245,4 @@ elif menu == "🗒️ Observations":
                         st.rerun()
     else:
         st.info("Aucune observation enregistrée pour le moment.")
+
