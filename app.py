@@ -289,47 +289,48 @@ def render_observations_section():
                 st.success("Observation Deleted Successfully.")
                 st.rerun()
 
-    elif menu == "🧾 Observations":
-        st.header("🧾 Medical and Commercial Observations")
-    
-        db_path = get_db_path()
-        conn = sqlite3.connect(db_path)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS observations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                categorie TEXT,
-                produit TEXT,
-                observation TEXT
-            )
-        """)
-    
-        with st.form("observation_form"):
-            categorie = st.selectbox("Category", ["Commercial", "Medical"])
-            produit = st.text_input("Concerned Product")
-            observation = st.text_area("Observation")
-            submit = st.form_submit_button("💾 Save")
-    
-            if submit and produit and observation:
-                conn.execute(
-                    "INSERT INTO observations (categorie, produit, observation) VALUES (?, ?, ?)",
-                    (categorie, produit, observation)
+        elif menu == "🧾 Observations":
+            st.header("🧾 Medical and Commercial Observations")
+        
+            db_path = get_db_path()
+            conn = sqlite3.connect(db_path)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS observations (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    categorie TEXT,
+                    produit TEXT,
+                    observation TEXT
                 )
-                conn.commit()
-                st.success("Observation Saved ✅")
-
-    # Liste des observations
-    df_obs = pd.read_sql_query("SELECT * FROM observations", conn)
-    conn.close()
-
-        if not df_obs.empty:
-            st.subheader("📋 List of observations")
-            for _, row in df_obs.iterrows():
-                with st.expander(f"{row['categorie']} - {row['produit']}"):
-                    st.write(row['observation'])
-
-
-
-
-
-
-
+            """)
+        
+            with st.form("observation_form"):
+                categorie = st.selectbox("Category", ["Commercial", "Medical"])
+                produit = st.text_input("Concerned Product")
+                observation = st.text_area("Observation")
+                submit = st.form_submit_button("💾 Save")
+        
+                if submit and produit and observation:
+                    conn.execute(
+                        "INSERT INTO observations (categorie, produit, observation) VALUES (?, ?, ?)",
+                        (categorie, produit, observation)
+                    )
+                    conn.commit()
+                    st.success("Observation Saved ✅")
+    
+        # Liste des observations
+        df_obs = pd.read_sql_query("SELECT * FROM observations", conn)
+        conn.close()
+    
+            if not df_obs.empty:
+                st.subheader("📋 List of observations")
+                for _, row in df_obs.iterrows():
+                    with st.expander(f"{row['categorie']} - {row['produit']}"):
+                        st.write(row['observation'])
+    
+    
+    
+    
+    
+    
+    
+    
