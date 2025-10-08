@@ -20,22 +20,22 @@ def check_password(username, password):
 
 if not st.session_state.authenticated:
     with st.form("login_form"):
-        st.markdown("## 🔒 Connexion")
-        user = st.text_input("Nom d'utilisateur")
-        pwd = st.text_input("Mot de passe", type="password")
-        submitted = st.form_submit_button("Se connecter")
+        st.markdown("## 🔒 Connection")
+        user = st.text_input("Username")
+        pwd = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
         if submitted:
             if check_password(user, pwd):
                 st.session_state.authenticated = True
                 st.session_state.username = user
-                st.success(f"Bienvenue {user} 👋")
+                st.success(f"Welcome {user} 👋")
                 st.rerun()
             else:
-                st.error("Identifiant ou mot de passe incorrect.")
+                st.error("Incorrect Password or Username")
     st.stop()
 else:
-    st.sidebar.markdown(f"**Connecté en tant que :** {st.session_state.username}")
-    if st.sidebar.button("🔓 Se déconnecter"):
+    st.sidebar.markdown(f"**Connected as :** {st.session_state.username}")
+    if st.sidebar.button("🔓 Logout"):
         st.session_state.authenticated = False
         st.session_state.username = ""
         st.rerun()
@@ -63,7 +63,7 @@ def get_db_path():
         if os.path.exists(path):
             return path
 
-    st.error("❌ Base de données introuvable. Placez 'all_pharma.db' dans le dossier `data/`.")
+    st.error("❌ Database not found. Place 'all_pharma.db' in the folder `data/`.")
     st.stop()
 
 
@@ -74,7 +74,7 @@ def load_data():
     try:
         df = pd.read_sql_query("SELECT * FROM drugs", conn)
     except Exception as e:
-        st.error(f"Erreur lors du chargement de la table 'drugs' : {e}")
+        st.error(f"Error while loading table 'drugs' : {e}")
         st.stop()
     finally:
         conn.close()
@@ -95,30 +95,30 @@ def extraire_prix(val):
 # =========================
 menu = st.sidebar.radio(
     "Navigation",
-    ["🏠 Accueil", "💊 Produits", "📊 Dashboard", "🧾 Observations"]
+    ["🏠 Home", "💊 Products", "📊 Dashboard", "🧾 Observations"]
 )
 
-if menu == "🚪 Déconnexion":
+if menu == "🚪 Logout":
     st.session_state.authenticated = False
     st.rerun()
 
 # =========================
 # 🏠 ACCUEIL
 # =========================
-if menu == "🏠 Accueil":
+if menu == "🏠 Home":
     st.title("💊 Pharma Data Platform")
-    st.markdown("Bienvenue sur la plateforme d’analyse et de gestion pharmaceutique 📊")
+    st.markdown("Welcome to the Pharmaceutical Managment & Analysis Pharma Data Platform 📊")
 
 # =========================
 # 💊 PRODUITS
 # =========================
-elif menu == "💊 Produits":
-    st.header("💊 Liste des produits")
+elif menu == "💊 Products":
+    st.header("💊 List of products")
 
     df = load_data()
 
     # Recherche
-    search = st.text_input("🔍 Rechercher un produit par nom, substance ou classe thérapeutique")
+    search = st.text_input("🔍 Research by name, or substance.")
 
     if search:
         df = df[df["name"].str.contains(search, case=False, na=False) |
@@ -136,7 +136,7 @@ elif menu == "💊 Produits":
         with st.expander(f"💊 {row['name']}"):
             st.markdown(f"**ATC :** {row.get('atc', 'N/A')}")
             st.markdown(f"**Type :** {row.get('type', 'N/A')}")
-            st.markdown(f"**Prix :** {row.get('price', 'N/A')}")
+            st.markdown(f"**Price :** {row.get('price', 'N/A')}")
             if 'description' in df.columns and row.get("description"):
                 st.markdown("**Description :**", unsafe_allow_html=True)
                 st.markdown(row["description"], unsafe_allow_html=True)
@@ -146,32 +146,32 @@ elif menu == "💊 Produits":
 # 📊 DASHBOARD
 # =========================
 elif menu == "📊 Dashboard":
-    st.header("📊 Dashboard - Analyse globale")
+    st.header("📊 Dashboard - Global Analysis")
     df = load_data()
     df["Prix_num"] = df["price"].apply(extraire_prix)
 
     for col in ["atc", "bcs", "oeb", "bioequivalence"]:
         if col in df.columns:
-            fig = px.pie(df, names=col, title=f"Répartition par {col.upper()}")
+            fig = px.pie(df, names=col, title=f"By {col.upper()}")
             st.plotly_chart(fig, use_container_width=True)
 
     if "type" in df.columns:
-        fig_class = px.pie(df, names="type", title="Répartition des classes thérapeutiques")
+        fig_class = px.pie(df, names="type", title="Therapeutical Classes")
         st.plotly_chart(fig_class, use_container_width=True)
 
     if df["Prix_num"].notna().any():
         top10 = df.nlargest(10, "Prix_num")
-        fig = px.bar(top10, x="name", y="Prix_num", title="Top 10 Médicaments les plus chers")
+        fig = px.bar(top10, x="name", y="Prix_num", title="Top 10 Most Expensive Medicines")
         st.plotly_chart(fig, use_container_width=True)
 
-        fig = px.histogram(df, x="Prix_num", nbins=20, title="Distribution des Prix")
+        fig = px.histogram(df, x="Prix_num", nbins=20, title="Price Distribution")
         st.plotly_chart(fig, use_container_width=True)
 
 # =========================
 # 🧾 OBSERVATIONS
 # =========================
 elif menu == "🧾 Observations":
-    st.header("🧾 Observations Commerciales & Médicales")
+    st.header("🧾 Medical and Commercial Observations")
 
     db_path = get_db_path()
     conn = sqlite3.connect(db_path)
@@ -185,10 +185,10 @@ elif menu == "🧾 Observations":
     """)
 
     with st.form("observation_form"):
-        categorie = st.selectbox("Catégorie", ["Commerciale", "Médicale"])
-        produit = st.text_input("Produit concerné")
+        categorie = st.selectbox("Category", ["Commercial", "Medical"])
+        produit = st.text_input("Concerned Product")
         observation = st.text_area("Observation")
-        submit = st.form_submit_button("💾 Enregistrer")
+        submit = st.form_submit_button("💾 Save")
 
         if submit and produit and observation:
             conn.execute(
@@ -196,17 +196,18 @@ elif menu == "🧾 Observations":
                 (categorie, produit, observation)
             )
             conn.commit()
-            st.success("Observation enregistrée ✅")
+            st.success("Observation Saved ✅")
 
     # Liste des observations
     df_obs = pd.read_sql_query("SELECT * FROM observations", conn)
     conn.close()
 
     if not df_obs.empty:
-        st.subheader("📋 Liste des observations")
+        st.subheader("📋 List of observations")
         for _, row in df_obs.iterrows():
             with st.expander(f"{row['categorie']} - {row['produit']}"):
                 st.write(row['observation'])
+
 
 
 
