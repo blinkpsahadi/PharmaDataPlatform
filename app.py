@@ -47,17 +47,26 @@ else:
 
 @st.cache_data
 def get_db_path():
-    """Retourne le chemin absolu vers la base de données, même en déploiement."""
+    """Trouve dynamiquement le chemin vers la base SQLite, même dans Streamlit Cloud."""
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        base_dir = os.getcwd()  # fallback si __file__ non défini
+
     possible_paths = [
-        os.path.join(os.path.dirname(__file__), "data", "all_pharma.db"),
-        os.path.join("data", "all_pharma.db"),
-        "all_pharma.db"
+        os.path.join(base_dir, "data", "all_pharma.db"),
+        os.path.join(os.getcwd(), "data", "all_pharma.db"),
+        "data/all_pharma.db",
+        "all_pharma.db",
     ]
+
     for path in possible_paths:
         if os.path.exists(path):
             return path
-    st.error("❌ Base de données introuvable. Assurez-vous que 'data/all_pharma.db' existe.")
+
+    st.error("❌ Base de données introuvable. Placez 'all_pharma.db' dans le dossier `data/`.")
     st.stop()
+
 
 @st.cache_data
 def load_data():
@@ -71,6 +80,7 @@ def load_data():
     finally:
         conn.close()
     return df
+
 
 def extraire_prix(val):
     try:
@@ -198,3 +208,4 @@ elif menu == "🧾 Observations":
         for _, row in df_obs.iterrows():
             with st.expander(f"{row['categorie']} - {row['produit']}"):
                 st.write(row['observation'])
+
