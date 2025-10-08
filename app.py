@@ -321,11 +321,11 @@ def render_observations_section():
         df_obs = pd.read_sql_query("SELECT * FROM observations", conn)
         conn.close()
     
-            if not df_obs.empty:
-                st.subheader("📋 List of observations")
-                for _, row in df_obs.iterrows():
-                    with st.expander(f"{row['categorie']} - {row['produit']}"):
-                        st.write(row['observation'])
+        if not df_obs.empty:
+            st.subheader("📋 List of observations")
+            for _, row in df_obs.iterrows():
+                with st.expander(f"{row['categorie']} - {row['produit']}"):
+                    st.write(row['observation'])
     
     
     
