@@ -14,8 +14,6 @@ if "username" not in st.session_state:
 
 if "credentials" in st.secrets:
     USERS = dict(st.secrets["credentials"])
-else:
-    USERS = {"admin": "monMDPsecret", "user1": "autreMDP"}
 
 def check_password(username, password):
     return username in USERS and USERS[username] == password
@@ -115,7 +113,7 @@ if menu == "🏠 Accueil":
 # 💊 PRODUITS
 # =========================
 elif menu == "💊 Produits":
-    st.header("💊 Liste des produits (base Rosheta + PillPilot)")
+    st.header("💊 Liste des produits")
 
     df = load_data()
 
@@ -209,6 +207,7 @@ elif menu == "🧾 Observations":
         for _, row in df_obs.iterrows():
             with st.expander(f"{row['categorie']} - {row['produit']}"):
                 st.write(row['observation'])
+
 
 
 
