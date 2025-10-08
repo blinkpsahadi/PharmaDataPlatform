@@ -168,18 +168,22 @@ elif menu == "📊 Dashboard":
         st.plotly_chart(fig, use_container_width=True)
 
 # =========================
-# 🧾 OBSERVATIONS
+# 🧾 OBSERVATIONS PAGE
 # =========================
 import streamlit as st
 import sqlite3
 import pandas as pd
+from datetime import datetime
+import os
 
 # =========================
 # 🔍 FONCTIONS UTILITAIRES
 # =========================
+DB_PATH = os.path.join("data", "all_pharma.db")
+
 def init_db():
     """Créer la table des observations si elle n'existe pas."""
-    conn = sqlite3.connect("data/all_pharma.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS observations (
@@ -193,16 +197,9 @@ def init_db():
     conn.commit()
     conn.close()
 
-def load_observations():
-    """Charger toutes les observations enregistrées."""
-    conn = sqlite3.connect("data/all_pharma.db")
-    df = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
-    conn.close()
-    return df
-
 def get_all_products():
     """Charger les noms des produits depuis la table drugs."""
-    conn = sqlite3.connect("data/all_pharma.db")
+    conn = sqlite3.connect(DB_PATH)
     try:
         df = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name ASC", conn)
         conn.close()
@@ -211,9 +208,16 @@ def get_all_products():
         conn.close()
         return []
 
+def load_observations():
+    """Charger toutes les observations enregistrées."""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
+    conn.close()
+    return df
+
 def add_observation(product, obs_type, comment):
     """Insérer une nouvelle observation."""
-    conn = sqlite3.connect("data/all_pharma.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
@@ -222,14 +226,21 @@ def add_observation(product, obs_type, comment):
     conn.commit()
     conn.close()
 
+def update_observation(obs_id, new_comment):
+    """Mettre à jour une observation existante."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE observations SET comment = ? WHERE id = ?", (new_comment, obs_id))
+    conn.commit()
+    conn.close()
+
 def delete_observation(obs_id):
     """Supprimer une observation."""
-    conn = sqlite3.connect("data/all_pharma.db")
+    conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     cursor.execute("DELETE FROM observations WHERE id = ?", (obs_id,))
     conn.commit()
     conn.close()
-
 
 # =========================
 # 💬 SECTION STREAMLIT
@@ -237,100 +248,73 @@ def delete_observation(obs_id):
 def render_observations_section():
     st.header("🩺 Commercial & Medical Observations")
 
-    init_db()  # s'assurer que la table existe
-
-    # Liste déroulante des produits
+    init_db()  # s’assurer que la table existe
     products = get_all_products()
-    st.subheader("Add a new observation")
 
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        selected_product = st.selectbox(
-            "Choose or Type a product",
-            options=["Type..."] + products,
-            index=0
-        )
-    with col2:
-        obs_type = st.selectbox("Type of observation", ["Commercial", "Medical", "Other"])
+    st.subheader("➕ Add a new observation")
 
-    if selected_product == "Type...":
-        product_name = st.text_input("Nom du produit")
-    else:
-        product_name = selected_product
+    # --- Formulaire d’ajout ---
+    with st.form("new_obs_form", clear_on_submit=True):
+        col1, col2 = st.columns([2, 1])
+        with col1:
+            selected_product = st.selectbox(
+                "Choose or Type a product",
+                options=["Type manually..."] + products,
+                index=0
+            )
+        with col2:
+            obs_type = st.selectbox("Type", ["Commercial", "Medical", "Other"])
 
-    comment = st.text_area("💬 observation's details")
-
-    if st.button("💾 Save observation"):
-        if product_name.strip() == "" or comment.strip() == "":
-            st.warning("Please add the product's name and a comment.")
+        if selected_product == "Type manually...":
+            product_name = st.text_input("Product name")
         else:
-            add_observation(product_name.strip(), obs_type, comment.strip())
-            st.success(f"Observation added for **{product_name}**.")
-            st.rerun()
+            product_name = selected_product
 
+        comment = st.text_area("💬 Observation details")
+
+        submitted = st.form_submit_button("💾 Save")
+        if submitted:
+            if product_name.strip() == "" or comment.strip() == "":
+                st.warning("⚠️ Please fill all required fields.")
+            else:
+                add_observation(product_name.strip(), obs_type, comment.strip())
+                st.success(f"✅ Observation added for **{product_name}**.")
+                st.rerun()
+
+    # --- Historique ---
     st.markdown("---")
     st.subheader("📜 History of Observations")
 
     df_obs = load_observations()
     if df_obs.empty:
-        st.info("No observation saved for the moment.")
+        st.info("No observations recorded yet.")
     else:
-        st.dataframe(df_obs, use_container_width=True)
+        # Tableau avec pagination
+        page_size = 10
+        total_pages = (len(df_obs) - 1) // page_size + 1
+        page = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
 
-        # Option de suppression
-        obs_to_delete = st.selectbox(
-            "🗑️ Delete observation",
-            options=[""] + [f"{r['id']} - {r['product_name']} ({r['type']})" for _, r in df_obs.iterrows()]
-        )
-        if obs_to_delete:
-            obs_id = int(obs_to_delete.split(" - ")[0])
-            if st.button("Confirm suppression"):
-                delete_observation(obs_id)
-                st.success("Observation Deleted Successfully.")
-                st.rerun()
+        start = (page - 1) * page_size
+        end = start + page_size
+        page_df = df_obs.iloc[start:end]
 
-        elif menu == "🧾 Observations":
-            st.header("🧾 Medical and Commercial Observations")
-        
-            db_path = get_db_path()
-            conn = sqlite3.connect(db_path)
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS observations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    categorie TEXT,
-                    produit TEXT,
-                    observation TEXT
-                )
-            """)
-        
-            with st.form("observation_form"):
-                categorie = st.selectbox("Category", ["Commercial", "Medical"])
-                produit = st.text_input("Concerned Product")
-                observation = st.text_area("Observation")
-                submit = st.form_submit_button("💾 Save")
-        
-                if submit and produit and observation:
-                    conn.execute(
-                        "INSERT INTO observations (categorie, produit, observation) VALUES (?, ?, ?)",
-                        (categorie, produit, observation)
-                    )
-                    conn.commit()
-                    st.success("Observation Saved ✅")
-    
-        # Liste des observations
-        df_obs = pd.read_sql_query("SELECT * FROM observations", conn)
-        conn.close()
-    
-        if not df_obs.empty:
-            st.subheader("📋 List of observations")
-            for _, row in df_obs.iterrows():
-                with st.expander(f"{row['categorie']} - {row['produit']}"):
-                    st.write(row['observation'])
+        for _, row in page_df.iterrows():
+            with st.expander(f"🧾 {row['product_name']} ({row['type']}) - {row['date']}"):
+                st.write(row['comment'])
+                new_comment = st.text_area("✏️ Edit comment", row['comment'], key=f"edit_{row['id']}")
+                colA, colB = st.columns(2)
+                with colA:
+                    if st.button("💾 Update", key=f"update_{row['id']}"):
+                        update_observation(row['id'], new_comment)
+                        st.success("Observation updated ✅")
+                        st.rerun()
+                with colB:
+                    if st.button("🗑️ Delete", key=f"delete_{row['id']}"):
+                        delete_observation(row['id'])
+                        st.warning("Observation deleted ❌")
+                        st.rerun()
+
     
     
     
-    
-    
-    
-    
-    
+
