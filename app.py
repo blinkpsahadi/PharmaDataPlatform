@@ -168,92 +168,73 @@ elif menu == "📊 Dashboard":
         st.plotly_chart(fig, use_container_width=True)
 
 # =========================
-# 🧾 OBSERVATIONS PAGE
+# 🧾 OBSERVATIONS
 # =========================
-import streamlit as st
-import sqlite3
-import pandas as pd
-from datetime import datetime
-import os
+elif menu == "🧾 Observations":
+    DB_PATH = os.path.join("data", "all_pharma.db")
 
-# =========================
-# 🔍 FONCTIONS UTILITAIRES
-# =========================
-DB_PATH = os.path.join("data", "all_pharma.db")
+    def init_db():
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_name TEXT,
+                type TEXT,
+                comment TEXT,
+                date TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
 
-def init_db():
-    """Créer la table des observations si elle n'existe pas."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS observations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            product_name TEXT,
-            type TEXT,
-            comment TEXT,
-            date TEXT DEFAULT CURRENT_TIMESTAMP
+    def get_all_products():
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            df = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name ASC", conn)
+            conn.close()
+            return df["name"].tolist()
+        except Exception:
+            conn.close()
+            return []
+
+    def load_observations():
+        conn = sqlite3.connect(DB_PATH)
+        df = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
+        conn.close()
+        return df
+
+    def add_observation(product, obs_type, comment):
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
+            (product, obs_type, comment)
         )
-    """)
-    conn.commit()
-    conn.close()
-
-def get_all_products():
-    """Charger les noms des produits depuis la table drugs."""
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        df = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name ASC", conn)
+        conn.commit()
         conn.close()
-        return df["name"].tolist()
-    except Exception:
+
+    def update_observation(obs_id, new_comment):
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("UPDATE observations SET comment = ? WHERE id = ?", (new_comment, obs_id))
+        conn.commit()
         conn.close()
-        return []
 
-def load_observations():
-    """Charger toutes les observations enregistrées."""
-    conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
-    conn.close()
-    return df
+    def delete_observation(obs_id):
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM observations WHERE id = ?", (obs_id,))
+        conn.commit()
+        conn.close()
 
-def add_observation(product, obs_type, comment):
-    """Insérer une nouvelle observation."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
-        (product, obs_type, comment)
-    )
-    conn.commit()
-    conn.close()
-
-def update_observation(obs_id, new_comment):
-    """Mettre à jour une observation existante."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("UPDATE observations SET comment = ? WHERE id = ?", (new_comment, obs_id))
-    conn.commit()
-    conn.close()
-
-def delete_observation(obs_id):
-    """Supprimer une observation."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM observations WHERE id = ?", (obs_id,))
-    conn.commit()
-    conn.close()
-
-# =========================
-# 💬 SECTION STREAMLIT
-# =========================
-def render_observations_section():
+    # ====== INTERFACE ======
     st.header("🩺 Commercial & Medical Observations")
-
-    init_db()  # s’assurer que la table existe
+    init_db()
     products = get_all_products()
 
-    st.subheader("➕ Add a new observation")
+    st.subheader("➕ Add a New Observation")
 
-    # --- Formulaire d’ajout ---
     with st.form("new_obs_form", clear_on_submit=True):
         col1, col2 = st.columns([2, 1])
         with col1:
@@ -281,7 +262,6 @@ def render_observations_section():
                 st.success(f"✅ Observation added for **{product_name}**.")
                 st.rerun()
 
-    # --- Historique ---
     st.markdown("---")
     st.subheader("📜 History of Observations")
 
@@ -289,7 +269,6 @@ def render_observations_section():
     if df_obs.empty:
         st.info("No observations recorded yet.")
     else:
-        # Tableau avec pagination
         page_size = 10
         total_pages = (len(df_obs) - 1) // page_size + 1
         page = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
@@ -313,8 +292,3 @@ def render_observations_section():
                         delete_observation(row['id'])
                         st.warning("Observation deleted ❌")
                         st.rerun()
-
-    
-    
-    
-
