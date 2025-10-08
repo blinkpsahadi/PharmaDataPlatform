@@ -97,7 +97,7 @@ def extraire_prix(val):
 # =========================
 menu = st.sidebar.radio(
     "Navigation",
-    ["🏠 Accueil", "💊 Produits", "📊 Dashboard", "🧾 Observations", "🚪 Déconnexion"]
+    ["🏠 Accueil", "💊 Produits", "📊 Dashboard", "🧾 Observations"]
 )
 
 if menu == "🚪 Déconnexion":
@@ -209,5 +209,6 @@ elif menu == "🧾 Observations":
         for _, row in df_obs.iterrows():
             with st.expander(f"{row['categorie']} - {row['produit']}"):
                 st.write(row['observation'])
+
 
 
