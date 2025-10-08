@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>SQLite</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.2/sql-wasm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; background:#f4f6f9; }
+    table { border-collapse: collapse; margin-top: 15px; width: 100%; background: #fff; }
+    th, td { border: 1px solid #ccc; padding: 5px; }
+    th { background: #eee; }
+    #header { background: #2c3e50; color:#fff; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .pagination { margin-top: 10px; margin-bottom: 10px; text-align:center; }
+    .pagination input { width: 50px; padding: 2px; text-align: center; }
+    .nav-buttons { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 10px; }
+    .nav-buttons button {
+      padding: 8px 12px; border: none; border-radius: 6px;
+      background: #2c3e50; color: #fff; cursor: pointer;
+    }
+    .nav-buttons button:hover { background: #34495e; }
+
+    #searchFloatBtn {
+      position: fixed;
+      right: 20px;
+      bottom: 120px;
+      background: #28a745;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+      z-index: 1000;
+    }
+    #searchFloatBtn:hover { background: #218838; }
+
+    #floatingSearchBox {
+      position: fixed;
+      bottom: 170px;
+      right: 20px;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      padding: 10px;
+      display: none;
+      z-index: 1001;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+      width: 260px;
+    }
+    #floatingSearchBox input { width: 90%; padding: 5px; margin-bottom: 6px; }
+    #floatingSearchBox button { margin: 2px; padding: 5px 8px; }
+    #searchCount { font-size: 12px; color: #333; margin-top: 5px; }
+    .highlight { background-color: yellow; }
+
+    #chart-container {
+      width: 100%;
+      height: 400px;
+      margin-top: 20px;
+      background: #fff;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      display: none;
+    }
+    #chartCanvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+    .notice {
+      font-size: 13px;
+      color: #555;
+      margin-top: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <h1>💊 Pharma SQLite Explorer</h1>
+    <p><b>Database:</b> <code>medic_db.db</code></p>
+    <input type="file" id="dbfile" accept=".sqlite,.db" />
+    <small>👉 Please upload <code>medic_db.db</code></small>
+  </div>
+
+  <h3>📋 Select Table</h3>
+  <select id="tableSelect"></select>
+
+  <div class="pagination" id="paginationTop">
+    <button id="firstPageTop">⏮️ First</button>
+    <button id="prevPageTop">⬅️ Prev</button>
+    <span id="pageInfoTop">Page 0 / 0</span>
+    <button id="nextPageTop">Next ➡️</button>
+    <button id="lastPageTop">Last ⏭️</button>
+    <input type="number" id="jumpPageTop" min="1" placeholder="Go">
+    <button id="goPageTop">Go</button>
+  </div>
+
+  <div id="output"></div>
+
+  <div class="pagination" id="paginationBottom">
+    <button id="firstPageBottom">⏮️ First</button>
+    <button id="prevPageBottom">⬅️ Prev</button>
+    <span id="pageInfoBottom">Page 0 / 0</span>
+    <button id="nextPageBottom">Next ➡️</button>
+    <button id="lastPageBottom">Last ⏭️</button>
+    <input type="number" id="jumpPageBottom" min="1" placeholder="Go">
+    <button id="goPageBottom">Go</button>
+  </div>
+
+  <div id="chart-options" style="display:none;">
+    <h3>📊 Create a Chart</h3>
+    <label>Chart Type:
+      <select id="chartType">
+        <option value="bar">Bar</option>
+        <option value="pie">Pie</option>
+        <option value="line">Line</option>
+      </select>
+    </label>
+    <br><br>
+    <label>X-Axis: <select id="xColumn"></select></label>
+    <label>Y-Axis: <select id="yColumn"></select></label>
+    <button id="generateChart">Generate Chart</button>
+    <div id="chartNotice" class="notice"></div>
+  </div>
+
+  <div id="chart-container">
+    <canvas id="chartCanvas"></canvas>
+  </div>
+
+  <div class="nav-buttons">
+    <button onclick="window.scrollTo({top:0, behavior:'smooth'})">⬆️ Top</button>
+    <button onclick="window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'})">⬇️ Bottom</button>
+  </div>
+
+  <button id="searchFloatBtn">🔍 Search</button>
+
+  <div id="floatingSearchBox">
+    <input type="text" id="searchInput" placeholder="Search (name, type, price...)" />
+    <div>
+      <button onclick="searchTable()">Find</button>
+      <button onclick="nextMatch()">Next</button>
+      <button onclick="prevMatch()">Previous</button>
+      <button onclick="clearSearch()">Clear</button>
+    </div>
+    <p id="searchCount"></p>
+  </div>
+
+  <script>
+    // helper to quote identifiers safely for SQLite
+    function qIdent(name) {
+      return '"' + String(name).replace(/"/g, '""') + '"';
+    }
+
+    // color generator for n items
+    function genColors(n) {
+      const colors = [];
+      for (let i = 0; i < n; i++) {
+        const hue = Math.round((i * 137.508) % 360); // golden angle
+        colors.push(`hsla(${hue}, 70%, 50%, 0.85)`);
+      }
+      return colors;
+    }
+
+    let db = null;
+    let currentTable = "";
+    let currentPage = 1;
+    let totalPages = 1;
+    const pageSize = 100;
+    let matches = [];
+    let currentMatchIndex = -1;
+
+    document.getElementById("searchFloatBtn").onclick = () => {
+      const box = document.getElementById("floatingSearchBox");
+      box.style.display = box.style.display === "none" ? "block" : "none";
+    };
+
+    initSqlJs({ locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.6.2/${file}` })
+      .then(SQL => {
+        document.getElementById("dbfile").addEventListener("change", async (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+          if (file.name !== "medic_db.db") {
+            alert("⚠️ Please upload the correct file: medic_db.db");
+            return;
+          }
+          const buffer = await file.arrayBuffer();
+          db = new SQL.Database(new Uint8Array(buffer));
+          alert("✅ medic_db.db loaded successfully!");
+
+          // fill table select
+          const res = db.exec("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;");
+          const tables = (res[0] && res[0].values) ? res[0].values.map(r => r[0]) : [];
+          const select = document.getElementById("tableSelect");
+          select.innerHTML = tables.map(t => `<option value="${t}">${t}</option>`).join("");
+          if (tables.length > 0) {
+            currentTable = tables[0];
+            currentPage = 1;
+            renderTable();
+          }
+        });
+
+        document.getElementById("tableSelect").addEventListener("change", () => {
+          currentTable = document.getElementById("tableSelect").value;
+          currentPage = 1;
+          renderTable();
+        });
+
+        // pagination buttons (Top & Bottom)
+        ["Top","Bottom"].forEach(pos => {
+          document.getElementById(`prevPage${pos}`).addEventListener("click", () => { if (currentPage > 1) { currentPage--; renderTable(); }});
+          document.getElementById(`nextPage${pos}`).addEventListener("click", () => { if (currentPage < totalPages) { currentPage++; renderTable(); }});
+          document.getElementById(`firstPage${pos}`).addEventListener("click", () => { currentPage = 1; renderTable(); });
+          document.getElementById(`lastPage${pos}`).addEventListener("click", () => { currentPage = totalPages; renderTable(); });
+          document.getElementById(`goPage${pos}`).addEventListener("click", () => {
+            const input = document.getElementById(`jumpPage${pos}`);
+            let page = parseInt(input.value);
+            if (!isNaN(page) && page >= 1 && page <= totalPages) { currentPage = page; renderTable(); }
+          });
+        });
+
+        function renderTable() {
+          if (!db || !currentTable) return;
+          try {
+            const countRes = db.exec(`SELECT COUNT(*) as c FROM ${qIdent(currentTable)}`);
+            const totalRows = countRes && countRes[0] && countRes[0].values.length ? countRes[0].values[0][0] : 0;
+            totalPages = Math.ceil(totalRows / pageSize) || 1;
+
+            const offset = (currentPage - 1) * pageSize;
+            const res = db.exec(`SELECT * FROM ${qIdent(currentTable)} LIMIT ${pageSize} OFFSET ${offset}`);
+
+            if (res.length > 0) {
+              let html = "<table><tr>";
+              res[0].columns.forEach(col => html += `<th>${col}</th>`);
+              html += "</tr>";
+              res[0].values.forEach(row => {
+                html += "<tr>";
+                row.forEach(val => html += `<td>${val}</td>`);
+                html += "</tr>";
+              });
+              html += "</table>";
+              document.getElementById("output").innerHTML = html;
+
+              // populate axis selects
+              const xSel = document.getElementById("xColumn");
+              const ySel = document.getElementById("yColumn");
+              xSel.innerHTML = res[0].columns.map(c => `<option value="${c}">${c}</option>`).join("");
+              ySel.innerHTML = res[0].columns.map(c => `<option value="${c}">${c}</option>`).join("");
+              document.getElementById("chart-options").style.display = "block";
+            } else {
+              document.getElementById("output").innerHTML = "No results.";
+              document.getElementById("chart-options").style.display = "none";
+            }
+
+            document.getElementById("pageInfoTop").textContent = `Page ${currentPage} / ${totalPages}`;
+            document.getElementById("pageInfoBottom").textContent = `Page ${currentPage} / ${totalPages}`;
+            document.getElementById("chartNotice").textContent = "";
+            document.getElementById("chart-container").style.display = "none";
+          } catch (err) {
+            console.error(err);
+            document.getElementById("output").innerHTML = `<p style="color:red;">${err}</p>`;
+          }
+        }
+
+        // === FIXED, ROBUST CHART GENERATOR ===
+        document.getElementById("generateChart").addEventListener("click", () => {
+          if (!db || !currentTable) {
+            alert("Load a database and select a table first.");
+            return;
+          }
+
+          const xCol = document.getElementById("xColumn").value;
+          const yCol = document.getElementById("yColumn").value;
+          const chartType = document.getElementById("chartType").value;
+          const limit = 50; // show top N groups to prevent overload
+
+          // sanitize/quote identifiers
+          const qTable = qIdent(currentTable);
+          const qX = qIdent(xCol);
+          const qY = qIdent(yCol);
+
+          try {
+            // figure out whether yCol is numeric using SQLite typeof()
+            let isNumeric = false;
+            try {
+              const sample = db.exec(`SELECT typeof(${qY}) as t FROM ${qTable} WHERE ${qY} IS NOT NULL LIMIT 1;`);
+              if (sample && sample[0] && sample[0].values && sample[0].values.length > 0) {
+                const t = String(sample[0].values[0][0]).toLowerCase();
+                isNumeric = (t === "integer" || t === "real");
+              } else {
+                // if no sample, fallback: treat as non-numeric
+                isNumeric = false;
+              }
+            } catch (e) {
+              // if typeof failed for some reason, fallback
+              console.warn("typeof check failed:", e);
+              isNumeric = false;
+            }
+
+            // count distinct groups to inform user if trimming happens
+            let distinctCount = null;
+            try {
+              const distinctRes = db.exec(`SELECT COUNT(DISTINCT ${qX}) FROM ${qTable};`);
+              if (distinctRes && distinctRes[0] && distinctRes[0].values && distinctRes[0].values.length) {
+                distinctCount = distinctRes[0].values[0][0];
+              }
+            } catch (e) {
+              console.warn("distinct count failed:", e);
+              distinctCount = null;
+            }
+
+            // build aggregation query (top N)
+            let aggQuery;
+            if (isNumeric) {
+              // numeric y: sum the numeric values (cast to real to be safe)
+              aggQuery =
+                `SELECT ${qX} AS x, SUM(CAST(${qY} AS REAL)) AS value
+                 FROM ${qTable}
+                 GROUP BY ${qX}
+                 ORDER BY value DESC
+                 LIMIT ${limit};`;
+            } else {
+              // categorical y: count occurrences per x
+              aggQuery =
+                `SELECT ${qX} AS x, COUNT(*) AS value
+                 FROM ${qTable}
+                 GROUP BY ${qX}
+                 ORDER BY value DESC
+                 LIMIT ${limit};`;
+            }
+
+            const res = db.exec(aggQuery);
+
+            if (!res || res.length === 0 || !res[0].values || res[0].values.length === 0) {
+              alert("No aggregated data returned for the selected columns. Try different columns.");
+              return;
+            }
+
+            const rows = res[0].values;
+            const labels = rows.map(r => (r[0] === null ? "NULL" : String(r[0])));
+            const data = rows.map(r => (r[1] === null ? 0 : Number(r[1])));
+
+            // if there are more groups than limit, tell the user it's trimmed
+            const noticeEl = document.getElementById("chartNotice");
+            if (distinctCount !== null && distinctCount > limit) {
+              noticeEl.textContent = `Showing top ${limit} of ${distinctCount} groups (sorted by value).`;
+            } else {
+              noticeEl.textContent = "";
+            }
+
+            const ctx = document.getElementById("chartCanvas").getContext("2d");
+            if (window.currentChart) window.currentChart.destroy();
+
+            const bg = genColors(labels.length);
+
+            // Chart configuration likely differs for pie: dataset config
+            const dataset = {
+              label: `${isNumeric ? 'SUM' : 'COUNT'} of ${yCol} by ${xCol}`,
+              data: data,
+              backgroundColor: bg,
+              borderColor: 'rgba(255,255,255,0.6)',
+              borderWidth: 1
+            };
+
+            const cfg = {
+              type: chartType,
+              data: {
+                labels: labels,
+                datasets: [dataset]
+              },
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: { position: 'top' }
+                }
+              }
+            };
+
+            window.currentChart = new Chart(ctx, cfg);
+            document.getElementById("chart-container").style.display = "block";
+            // scroll to chart so user sees it
+            document.getElementById("chart-container").scrollIntoView({behavior: "smooth"});
+          } catch (err) {
+            console.error("Chart generation error:", err);
+            alert("Error generating chart: " + (err && err.message ? err.message : err));
+          }
+        });
+
+        // === SEARCH Functions ===
+        function searchTable() {
+          const keyword = document.getElementById("searchInput").value.toLowerCase();
+          matches = []; currentMatchIndex = -1;
+          if (!keyword) { document.getElementById("searchCount").innerText = ""; return; }
+
+          const res = db.exec(`SELECT * FROM ${qIdent(currentTable)}`);
+          if (res.length === 0) return;
+          res[0].values.forEach((row, rowIndex) => {
+            row.forEach((val, colIndex) => {
+              if (String(val).toLowerCase().includes(keyword)) {
+                matches.push({ rowIndex, colIndex, value: val });
+              }
+            });
+          });
+
+          if (matches.length > 0) { currentMatchIndex = 0; goToMatch(); }
+          document.getElementById("searchCount").innerText =
+            matches.length > 0 ? `Found ${matches.length} matches` : "No matches found";
+        }
+
+        function goToMatch() {
+          if (currentMatchIndex < 0 || currentMatchIndex >= matches.length) return;
+          const match = matches[currentMatchIndex];
+          const page = Math.floor(match.rowIndex / pageSize) + 1;
+          currentPage = page;
+          renderTable();
+          setTimeout(() => {
+            const rows = document.querySelectorAll("#output table tr");
+            const cell = rows[(match.rowIndex % pageSize) + 1].cells[match.colIndex];
+            cell.classList.add("highlight");
+            cell.scrollIntoView({ behavior: "smooth", block: "center" });
+          }, 200);
+        }
+
+        function nextMatch() { if (matches.length) { currentMatchIndex = (currentMatchIndex + 1) % matches.length; goToMatch(); } }
+        function prevMatch() { if (matches.length) { currentMatchIndex = (currentMatchIndex - 1 + matches.length) % matches.length; goToMatch(); } }
+        function clearSearch() {
+          matches = []; currentMatchIndex = -1;
+          document.getElementById("searchCount").innerText = "";
+          document.getElementById("searchInput").value = "";
+          renderTable();
+        }
+
+        window.searchTable = searchTable;
+        window.nextMatch = nextMatch;
+        window.prevMatch = prevMatch;
+        window.clearSearch = clearSearch;
+      });
+  </script>
+</body>
+</html>
