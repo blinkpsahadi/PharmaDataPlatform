@@ -3,7 +3,6 @@ import pandas as pd
 import sqlite3
 import plotly.express as px
 import os
-from streamlit_cookies_manager import EncryptedCookieManager
 
 # ---------------------------
 # PAGE CONFIG
@@ -62,10 +61,6 @@ header {display: none !important;}
 """, unsafe_allow_html=True)
 
 # =========================
-# 🔐 AUTHENTIFICATION 
-# =========================
-
-# =========================
 # 🔐 AUTHENTIFICATION
 # =========================
 if "authenticated" not in st.session_state:
@@ -100,7 +95,6 @@ else:
         st.session_state.authenticated = False
         st.session_state.username = ""
         st.rerun()
-
 
 # ---------------------------
 # DB HELPERS
@@ -313,6 +307,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
