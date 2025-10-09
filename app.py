@@ -59,7 +59,17 @@ header {display: none !important;}
 }
 </style>
 """, unsafe_allow_html=True)
-
+st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
+st.markdown("""
+    <style>
+    /* Hide the "View source" GitHub banner */
+    [data-testid="stToolbar"] {
+        visibility: hidden;
+        height: 0;
+        position: fixed;
+    }
+    </style>
+""", unsafe_allow_html=True)
 # =========================
 # 🔐 AUTHENTIFICATION
 # =========================
@@ -307,6 +317,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
