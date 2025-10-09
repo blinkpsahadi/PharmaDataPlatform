@@ -3,6 +3,16 @@ import pandas as pd
 import sqlite3
 import plotly.express as px
 import os
+from streamlit_cookies_manager import EncryptedCookieManager
+
+# Setup cookie manager (must be initialized before using cookies)
+cookies = EncryptedCookieManager(
+    prefix="pharma_app_",
+    password="my_secret_password"  # change this to any secure string
+)
+
+if not cookies.ready():
+    st.stop()  # Wait for cookies to initialize
 
 # ---------------------------
 # PAGE CONFIG
@@ -60,37 +70,43 @@ header {display: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
+# =========================
+# 🔐 AUTHENTIFICATION (with persistent login)
+# =========================
 
-# ---------------------------
-# AUTHENTICATION
-# ---------------------------
 if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+    st.session_state.authenticated = cookies.get("authenticated") == "True"
 if "username" not in st.session_state:
-    st.session_state.username = ""
-
-USERS = {}
-if "credentials" in st.secrets:
-    USERS = dict(st.secrets["credentials"])
-
-def check_password(username, password):
-    return username in USERS and USERS[username] == password
+    st.session_state.username = cookies.get("username", "")
 
 if not st.session_state.authenticated:
-    with st.form("login_form"):
-        st.markdown("## 🔒 Connection")
-        user = st.text_input("Username")
-        pwd = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
-        if submitted:
-            if check_password(user, pwd):
-                st.session_state.authenticated = True
-                st.session_state.username = user
-                st.success(f"Welcome {user} 👋")
-                st.rerun()
-            else:
-                st.error("Incorrect Username or Password")
-    st.stop()
+    st.title("🔐 Pharma Data Platform - Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login", use_container_width=True):
+        if username == "admin" and password == "1234":
+            st.session_state.authenticated = True
+            st.session_state.username = username
+            cookies["authenticated"] = "True"
+            cookies["username"] = username
+            cookies.save()
+            st.success(f"Welcome {username}!")
+            st.rerun()
+        else:
+            st.error("Invalid username or password")
+
+else:
+    # Sidebar / left column layout here...
+    st.markdown(f"**Connected as:** `{st.session_state.username}`")
+
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.authenticated = False
+        st.session_state.username = ""
+        cookies["authenticated"] = "False"
+        cookies["username"] = ""
+        cookies.save()
+        st.rerun()
 
 # ---------------------------
 # DB HELPERS
@@ -303,6 +319,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
