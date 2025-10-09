@@ -205,11 +205,11 @@ with main_col:
                 st.write(f"**ATC:** {row.get('atc', 'N/A')}")
                 st.write(f"**Type:** {row.get('type', 'N/A')}")
                 st.write(f"**Price:** {row.get('price', 'N/A')}")
-            if "description" in df.columns and row.get("description"):
+                if "description" in df.columns and row.get("description"):
                     st.markdown("**Description:**", unsafe_allow_html=True)
                     st.markdown(row["description"], unsafe_allow_html=True)
                 # Separator for visual clarity
-            st.markdown("---")
+                st.markdown("---")
     
 
     # =========================
@@ -298,6 +298,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
