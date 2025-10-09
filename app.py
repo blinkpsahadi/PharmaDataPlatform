@@ -4,49 +4,53 @@ import sqlite3
 import plotly.express as px
 import os
 
-# =========================
-# 🌍 CONFIGURATION GLOBALE
-# =========================
 st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
 
-# --- Global responsive CSS ---
+# --- Inject responsive detection script ---
+detect_script = """
+    <script>
+    const width = window.innerWidth;
+    const isMobile = width < 768;
+    window.parent.postMessage({ isMobile }, "*");
+    </script>
+"""
+st.markdown(detect_script, unsafe_allow_html=True)
+
+# Container for device detection
+if "is_mobile" not in st.session_state:
+    st.session_state.is_mobile = False
+
+# Receive width info
 st.markdown("""
-    <style>
-    /* Hide Streamlit toolbar */
-    [data-testid="stToolbar"] {visibility: hidden; height: 0; position: fixed;}
-
-    /* Improve readability on mobile */
-    @media (max-width: 768px) {
-        h1, h2, h3, h4, h5, h6 {font-size: 1.1rem !important;}
-        .stButton>button {width: 100% !important;}
-        .stTextInput>div>div>input,
-        .stTextArea>div>textarea,
-        .stSelectbox>div>div>select {
-            font-size: 14px !important;
-        }
-        .block-container {
-            padding: 1rem 0.6rem !important;
-        }
-        .stExpander {
-            border-radius: 12px;
-            margin-bottom: 10px !important;
-        }
-        .stNumberInput>div>div>input {
-            width: 100% !important;
-        }
+<script>
+window.addEventListener('message', (event) => {
+    if (event.data.isMobile !== undefined) {
+        window.streamlitSend({type:'streamlit:setSessionState',data:{is_mobile:event.data.isMobile}});
     }
-
-    /* Scrollable tables and better wrapping */
-    .stDataFrame, .stTable {
-        overflow-x: auto !important;
-        display: block;
-    }
-    </style>
+});
+</script>
 """, unsafe_allow_html=True)
 
-# =========================
-# 🔐 AUTHENTIFICATION
-# =========================
+# --- Dynamic CSS ---
+st.markdown("""
+<style>
+[data-testid="stToolbar"] {visibility: hidden; height: 0;}
+
+.block-container {
+    padding: 1rem 2rem;
+}
+
+@media (max-width: 768px) {
+    .block-container {padding: 0.5rem 0.8rem !important;}
+    .stMarkdown, .stTextInput, .stSelectbox, .stTextArea {font-size: 14px !important;}
+    .stButton>button {width: 100% !important;}
+    .stExpander {margin-bottom: 0.8rem !important;}
+    h1,h2,h3 {font-size: 1.1rem !important;}
+}
+</style>
+""", unsafe_allow_html=True)
+
+# --- Authentication (same as before) ---
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "username" not in st.session_state:
@@ -71,260 +75,144 @@ if not st.session_state.authenticated:
                 st.success(f"Welcome {user} 👋")
                 st.rerun()
             else:
-                st.error("Incorrect Password or Username")
+                st.error("Incorrect Username or Password")
     st.stop()
 else:
-    st.sidebar.markdown(f"**Connected as :** {st.session_state.username}")
-    if st.sidebar.button("🔓 Logout"):
-        st.session_state.authenticated = False
-        st.session_state.username = ""
-        st.rerun()
+    # Hide sidebar completely on mobile
+    if not st.session_state.is_mobile:
+        st.sidebar.markdown(f"**Connected as:** {st.session_state.username}")
+        if st.sidebar.button("🔓 Logout"):
+            st.session_state.authenticated = False
+            st.rerun()
+    else:
+        st.markdown(f"✅ Logged in as **{st.session_state.username}**")
 
-# =========================
-# 📦 FONCTIONS
-# =========================
-
+# --- DB Functions ---
 @st.cache_data
 def get_db_path():
-    try:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-    except NameError:
-        base_dir = os.getcwd()
-
-    possible_paths = [
-        os.path.join(base_dir, "data", "all_pharma.db"),
-        os.path.join(os.getcwd(), "data", "all_pharma.db"),
-        "data/all_pharma.db",
-        "all_pharma.db",
-    ]
-    for path in possible_paths:
+    for path in [
+        "data/all_pharma.db", "all_pharma.db",
+        os.path.join(os.getcwd(), "data", "all_pharma.db")
+    ]:
         if os.path.exists(path):
             return path
-
-    st.error("❌ Database not found. Place 'all_pharma.db' in `data/` folder.")
+    st.error("❌ Database not found.")
     st.stop()
 
 @st.cache_data
 def load_data():
-    db_path = get_db_path()
-    conn = sqlite3.connect(db_path)
-    try:
-        df = pd.read_sql_query("SELECT * FROM drugs", conn)
-    except Exception as e:
-        st.error(f"Error while loading table 'drugs' : {e}")
-        st.stop()
-    finally:
-        conn.close()
+    conn = sqlite3.connect(get_db_path())
+    df = pd.read_sql_query("SELECT * FROM drugs", conn)
+    conn.close()
     return df
 
-def extraire_prix(val):
+def extract_price(val):
     try:
-        if pd.isna(val):
-            return None
-        val = str(val).replace("DA", "").replace(",", ".").strip()
-        return float(val)
+        return float(str(val).replace("DA", "").replace(",", ".").strip())
     except:
         return None
 
-# =========================
-# 🧭 BARRE LATÉRALE
-# =========================
-menu = st.sidebar.radio(
-    "Navigation",
-    ["🏠 Home", "💊 Products", "📊 Dashboard", "🧾 Observations"]
-)
+# --- NAVIGATION (mobile = top menu) ---
+if st.session_state.is_mobile:
+    menu = st.selectbox(
+        "📱 Navigate",
+        ["🏠 Home", "💊 Products", "📊 Dashboard", "🧾 Observations"]
+    )
+else:
+    menu = st.sidebar.radio(
+        "Navigation",
+        ["🏠 Home", "💊 Products", "📊 Dashboard", "🧾 Observations"]
+    )
 
-# =========================
-# 🏠 HOME
-# =========================
+# --- PAGES ---
 if menu == "🏠 Home":
     st.title("💊 Pharma Data Platform")
-    st.markdown("""
-        Welcome to the Pharmaceutical Management & Analysis Platform 📊  
-        This app adapts automatically to your screen — PC, tablet, or smartphone.  
-    """)
+    st.markdown("Welcome to the Pharmaceutical Management & Analysis Platform 📊")
 
-# =========================
-# 💊 PRODUCTS
-# =========================
 elif menu == "💊 Products":
     st.header("💊 List of Products")
-
     df = load_data()
-
-    # Search
     search = st.text_input("🔍 Search by name or substance")
-
     if search:
         df = df[df["name"].str.contains(search, case=False, na=False) |
                 df["type"].str.contains(search, case=False, na=False)]
 
-    # Pagination (dynamic per device)
-    items_per_page = 50 if st.runtime.scriptrunner.script_run_context.is_running_with_streamlit else 100
-    total_pages = (len(df) // items_per_page) + 1
-    page = st.number_input("Page", min_value=1, max_value=total_pages, value=1)
-    start, end = (page - 1) * items_per_page, page * items_per_page
-    subset = df.iloc[start:end]
+    items_per_page = 50 if st.session_state.is_mobile else 100
+    total_pages = max(1, (len(df) - 1) // items_per_page + 1)
+    page = st.number_input("Page", 1, total_pages, 1)
+    subset = df.iloc[(page-1)*items_per_page : page*items_per_page]
 
-    # Mobile-friendly expander
     for _, row in subset.iterrows():
         with st.expander(f"💊 {row['name']}"):
-            st.markdown(f"**ATC:** {row.get('atc', 'N/A')}")
-            st.markdown(f"**Type:** {row.get('type', 'N/A')}")
-            st.markdown(f"**Price:** {row.get('price', 'N/A')}")
+            st.write(f"**ATC:** {row.get('atc', 'N/A')}")
+            st.write(f"**Type:** {row.get('type', 'N/A')}")
+            st.write(f"**Price:** {row.get('price', 'N/A')}")
             if 'description' in df.columns and row.get("description"):
-                st.markdown("**Description:**", unsafe_allow_html=True)
                 st.markdown(row["description"], unsafe_allow_html=True)
-            st.markdown("---")
 
-# =========================
-# 📊 DASHBOARD
-# =========================
 elif menu == "📊 Dashboard":
-    st.header("📊 Dashboard - Global Analysis")
+    st.header("📊 Global Analysis")
     df = load_data()
-    df["Prix_num"] = df["price"].apply(extraire_prix)
+    df["Prix_num"] = df["price"].apply(extract_price)
 
     for col in ["atc", "bcs", "oeb", "bioequivalence"]:
         if col in df.columns:
             fig = px.pie(df, names=col, title=f"By {col.upper()}")
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True, height=400 if st.session_state.is_mobile else 600)
 
     if "type" in df.columns:
-        fig_class = px.pie(df, names="type", title="Therapeutical Classes")
-        st.plotly_chart(fig_class, use_container_width=True)
+        fig = px.pie(df, names="type", title="Therapeutical Classes")
+        st.plotly_chart(fig, use_container_width=True)
 
     if df["Prix_num"].notna().any():
         top10 = df.nlargest(10, "Prix_num")
         fig = px.bar(top10, x="name", y="Prix_num", title="Top 10 Most Expensive Medicines")
         st.plotly_chart(fig, use_container_width=True)
 
-        fig = px.histogram(df, x="Prix_num", nbins=20, title="Price Distribution")
-        st.plotly_chart(fig, use_container_width=True)
-
-# =========================
-# 🧾 OBSERVATIONS
-# =========================
 elif menu == "🧾 Observations":
-    DB_PATH = os.path.join("data", "all_pharma.db")
-
-    def init_db():
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS observations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                product_name TEXT,
-                type TEXT,
-                comment TEXT,
-                date TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        conn.commit()
-        conn.close()
-
-    def get_all_products():
-        conn = sqlite3.connect(DB_PATH)
-        try:
-            df = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name ASC", conn)
-            conn.close()
-            return df["name"].tolist()
-        except Exception:
-            conn.close()
-            return []
-
-    def load_observations():
-        conn = sqlite3.connect(DB_PATH)
-        df = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
-        conn.close()
-        return df
-
-    def add_observation(product, obs_type, comment):
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
-            (product, obs_type, comment)
-        )
-        conn.commit()
-        conn.close()
-
-    def update_observation(obs_id, new_comment):
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("UPDATE observations SET comment = ? WHERE id = ?", (new_comment, obs_id))
-        conn.commit()
-        conn.close()
-
-    def delete_observation(obs_id):
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM observations WHERE id = ?", (obs_id,))
-        conn.commit()
-        conn.close()
-
-    # --- UI ---
     st.header("🩺 Commercial & Medical Observations")
-    init_db()
-    products = get_all_products()
 
-    st.subheader("➕ Add a New Observation")
+    db_path = get_db_path()
+    conn = sqlite3.connect(db_path)
+    conn.execute("""CREATE TABLE IF NOT EXISTS observations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_name TEXT,
+        type TEXT,
+        comment TEXT,
+        date TEXT DEFAULT CURRENT_TIMESTAMP
+    )""")
+    conn.commit()
 
-    with st.form("new_obs_form", clear_on_submit=True):
-        col1, col2 = st.columns([2, 1]) if st.session_state.get("is_desktop", True) else st.columns(1)
-        with col1:
-            selected_product = st.selectbox(
-                "Choose or Type a product",
-                options=["Type manually..."] + products,
-                index=0
-            )
-        with col2:
-            obs_type = st.selectbox("Type", ["Commercial", "Medical", "Other"])
+    df_products = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name", conn)
+    products = df_products["name"].tolist()
+    conn.close()
 
-        if selected_product == "Type manually...":
-            product_name = st.text_input("Product name")
-        else:
-            product_name = selected_product
-
-        comment = st.text_area("💬 Observation details")
-
-        submitted = st.form_submit_button("💾 Save")
-        if submitted:
-            if product_name.strip() == "" or comment.strip() == "":
-                st.warning("⚠️ Please fill all required fields.")
-            else:
-                add_observation(product_name.strip(), obs_type, comment.strip())
-                st.success(f"✅ Observation added for **{product_name}**.")
-                st.rerun()
+    with st.form("new_obs", clear_on_submit=True):
+        product = st.selectbox("Product", ["Type manually..."] + products)
+        obs_type = st.selectbox("Type", ["Commercial", "Medical", "Other"])
+        if product == "Type manually...":
+            product = st.text_input("Manual Product Name")
+        comment = st.text_area("💬 Observation")
+        submit = st.form_submit_button("💾 Save")
+        if submit:
+            conn = sqlite3.connect(db_path)
+            conn.execute("INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
+                         (product, obs_type, comment))
+            conn.commit()
+            conn.close()
+            st.success("✅ Observation saved.")
+            st.rerun()
 
     st.markdown("---")
-    st.subheader("📜 History of Observations")
+    conn = sqlite3.connect(db_path)
+    df_obs = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
+    conn.close()
 
-    df_obs = load_observations()
     if df_obs.empty:
-        st.info("No observations recorded yet.")
+        st.info("No observations yet.")
     else:
-        page_size = 10
-        total_pages = (len(df_obs) - 1) // page_size + 1
-        page = st.number_input("Page", min_value=1, max_value=total_pages, step=1)
-
-        start = (page - 1) * page_size
-        end = start + page_size
-        page_df = df_obs.iloc[start:end]
-
-        for _, row in page_df.iterrows():
-            with st.expander(f"🧾 {row['product_name']} ({row['type']}) - {row['date']}"):
+        for _, row in df_obs.iterrows():
+            with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                 st.write(row['comment'])
-                new_comment = st.text_area("✏️ Edit comment", row['comment'], key=f"edit_{row['id']}")
-                colA, colB = st.columns(2) if st.session_state.get("is_desktop", True) else st.columns(1)
-                with colA:
-                    if st.button("💾 Update", key=f"update_{row['id']}"):
-                        update_observation(row['id'], new_comment)
-                        st.success("Observation updated ✅")
-                        st.rerun()
-                with colB:
-                    if st.button("🗑️ Delete", key=f"delete_{row['id']}"):
-                        delete_observation(row['id'])
-                        st.warning("Observation deleted ❌")
-                        st.rerun()
+
 
