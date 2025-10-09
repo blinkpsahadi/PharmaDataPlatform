@@ -185,8 +185,13 @@ with main_col:
 
         search = st.text_input("🔍 Search by name or substance")
         if search:
-            df = df[df["name"].str.contains(search, case=False, na=False) |
-                    df["type"].str.contains(search, case=False, na=False)]
+            search_cols = ["name", "type", "scientific_name"]
+            available_cols = [c for c in search_cols if c in df.columns]
+            mask = False
+            for c in available_cols:
+                mask |= df[c].astype(str).str.contains(search, case=False, na=False)
+            df = df[mask]
+
 
         # A moderate page size that works on both desktop and mobile
         items_per_page = 50
@@ -196,11 +201,11 @@ with main_col:
 
         for _, row in subset.iterrows():
             with st.expander(f"💊 {row['name']}"):
+                st.write(f"**Scientific name:** {row.get('scientific_name', 'N/A')}")
                 st.write(f"**ATC:** {row.get('atc', 'N/A')}")
                 st.write(f"**Type:** {row.get('type', 'N/A')}")
                 st.write(f"**Price:** {row.get('price', 'N/A')}")
-                if "description" in df.columns and row.get("description"):
-                    st.markdown(row["description"], unsafe_allow_html=True)
+
 
     # =========================
     # DASHBOARD
@@ -288,6 +293,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
