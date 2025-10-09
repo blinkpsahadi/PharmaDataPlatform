@@ -158,12 +158,18 @@ with left_col:
         key="nav_selection_radio"
     )
 
+    # Display user info at the top of the main page
     st.markdown("---")
     st.markdown(f"**Connected as:**  \n`{st.session_state.username}`")
-        if st.sidebar.button("Logout", use_container_width=True):
+    
+    # Add the Logout button in the sidebar (always visible when logged in)
+    with st.sidebar:
+        st.markdown("---")
+        if st.button("🚪 Logout", use_container_width=True):
             st.session_state.authenticated = False
             st.session_state.username = ""
             st.rerun()
+    
 
 # Main content area
 with main_col:
@@ -298,6 +304,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
