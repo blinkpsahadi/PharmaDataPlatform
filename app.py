@@ -70,6 +70,7 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
 # =========================
 # 🔐 AUTHENTIFICATION
 # =========================
@@ -78,34 +79,33 @@ if "authenticated" not in st.session_state:
 if "username" not in st.session_state:
     st.session_state.username = ""
 
-# Login screen (if not authenticated)
+if "credentials" in st.secrets:
+    USERS = dict(st.secrets["credentials"])
+
+def check_password(username, password):
+    return username in USERS and USERS[username] == password
+
 if not st.session_state.authenticated:
-    st.title("🔐 Pharma Data Platform - Login")
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login", use_container_width=True):
-        if username == "admin" and password == "1234":  # Example credentials
-            st.session_state.authenticated = True
-            st.session_state.username = username
-            st.success(f"Welcome {username}!")
-            st.rerun()
-        else:
-            st.error("Invalid username or password")
-
-# Main app (if authenticated)
+    with st.form("login_form"):
+        st.markdown("## 🔒 Connection")
+        user = st.text_input("Username")
+        pwd = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+        if submitted:
+            if check_password(user, pwd):
+                st.session_state.authenticated = True
+                st.session_state.username = user
+                st.success(f"Welcome {user} 👋")
+                st.rerun()
+            else:
+                st.error("Incorrect Password or Username")
+    st.stop()
 else:
-    st.sidebar.title(f"👋 Welcome {st.session_state.username}")
-    
-    # Sidebar navigation here...
-    menu = st.sidebar.radio("Navigation", ["🏠 Home", "💊 Produits", "📊 Statistiques", "⚙️ Paramètres"])
-
-    # 🚪 Logout button — always visible when authenticated
-    if st.sidebar.button("Logout", use_container_width=True):
+    st.sidebar.markdown(f"**Connected as :** {st.session_state.username}")
+    if st.sidebar.button("🔓 Logout"):
         st.session_state.authenticated = False
         st.session_state.username = ""
         st.rerun()
-
 # ---------------------------
 # DB HELPERS
 # ---------------------------
@@ -317,6 +317,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
