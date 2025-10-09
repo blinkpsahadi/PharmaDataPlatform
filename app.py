@@ -140,17 +140,17 @@ left_col, main_col = st.columns([1, 4], gap="small")
 
 with left_col:
     st.markdown("### 💊 Navigation")
+    
     # Initialize session state value for menu if absent
     if "nav_selection" not in st.session_state:
         st.session_state.nav_selection = menu_options[0]
 
-    # the radio will be rendered inside the left column; on small screens columns stack so it stays visible
     try:
         selected_index = menu_options.index(st.session_state.nav_selection)
     except ValueError:
         selected_index = 0
 
-    # Render navigation radio (keeps selection in session_state['nav_selection'])
+    # Render navigation menu
     st.session_state.nav_selection = st.radio(
         "Menu",
         menu_options,
@@ -158,17 +158,16 @@ with left_col:
         key="nav_selection_radio"
     )
 
-    # Display user info at the top of the main page
+    # Divider
     st.markdown("---")
     st.markdown(f"**Connected as:**  \n`{st.session_state.username}`")
-    
-    # Add the Logout button in the sidebar (always visible when logged in)
-    with st.sidebar:
-        st.markdown("---")
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.username = ""
-            st.rerun()
+
+    # 🚪 Logout button — now visible in your left sidebar column
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.authenticated = False
+        st.session_state.username = ""
+        st.rerun()
+
     
 
 # Main content area
@@ -304,6 +303,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
