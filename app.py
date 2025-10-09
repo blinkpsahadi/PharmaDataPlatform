@@ -5,15 +5,6 @@ import plotly.express as px
 import os
 from streamlit_cookies_manager import EncryptedCookieManager
 
-# Setup cookie manager (must be initialized before using cookies)
-cookies = EncryptedCookieManager(
-    prefix="pharma_app_",
-    password="my_secret_password"  # change this to any secure string
-)
-
-if not cookies.ready():
-    st.stop()  # Wait for cookies to initialize
-
 # ---------------------------
 # PAGE CONFIG
 # ---------------------------
@@ -71,42 +62,45 @@ header {display: none !important;}
 """, unsafe_allow_html=True)
 
 # =========================
-# 🔐 AUTHENTIFICATION (with persistent login)
+# 🔐 AUTHENTIFICATION 
 # =========================
 
+# =========================
+# 🔐 AUTHENTIFICATION
+# =========================
 if "authenticated" not in st.session_state:
-    st.session_state.authenticated = cookies.get("authenticated") == "True"
+    st.session_state.authenticated = False
 if "username" not in st.session_state:
-    st.session_state.username = cookies.get("username", "")
+    st.session_state.username = ""
 
+# Login screen (if not authenticated)
 if not st.session_state.authenticated:
     st.title("🔐 Pharma Data Platform - Login")
     username = st.text_input("Username")
     password = st.text_input("Password", type="password")
 
     if st.button("Login", use_container_width=True):
-        if username == "admin" and password == "1234":
+        if username == "admin" and password == "1234":  # Example credentials
             st.session_state.authenticated = True
             st.session_state.username = username
-            cookies["authenticated"] = "True"
-            cookies["username"] = username
-            cookies.save()
             st.success(f"Welcome {username}!")
             st.rerun()
         else:
             st.error("Invalid username or password")
 
+# Main app (if authenticated)
 else:
-    # Sidebar / left column layout here...
-    st.markdown(f"**Connected as:** `{st.session_state.username}`")
+    st.sidebar.title(f"👋 Welcome {st.session_state.username}")
+    
+    # Sidebar navigation here...
+    menu = st.sidebar.radio("Navigation", ["🏠 Home", "💊 Produits", "📊 Statistiques", "⚙️ Paramètres"])
 
-    if st.button("🚪 Logout", use_container_width=True):
+    # 🚪 Logout button — always visible when authenticated
+    if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.authenticated = False
         st.session_state.username = ""
-        cookies["authenticated"] = "False"
-        cookies["username"] = ""
-        cookies.save()
         st.rerun()
+
 
 # ---------------------------
 # DB HELPERS
@@ -319,6 +313,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
