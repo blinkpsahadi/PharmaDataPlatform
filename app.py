@@ -4,6 +4,46 @@ import sqlite3
 import plotly.express as px
 import os
 
+# =========================
+# 🌍 CONFIGURATION GLOBALE
+# =========================
+st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
+
+# --- Global responsive CSS ---
+st.markdown("""
+    <style>
+    /* Hide Streamlit toolbar */
+    [data-testid="stToolbar"] {visibility: hidden; height: 0; position: fixed;}
+
+    /* Improve readability on mobile */
+    @media (max-width: 768px) {
+        h1, h2, h3, h4, h5, h6 {font-size: 1.1rem !important;}
+        .stButton>button {width: 100% !important;}
+        .stTextInput>div>div>input,
+        .stTextArea>div>textarea,
+        .stSelectbox>div>div>select {
+            font-size: 14px !important;
+        }
+        .block-container {
+            padding: 1rem 0.6rem !important;
+        }
+        .stExpander {
+            border-radius: 12px;
+            margin-bottom: 10px !important;
+        }
+        .stNumberInput>div>div>input {
+            width: 100% !important;
+        }
+    }
+
+    /* Scrollable tables and better wrapping */
+    .stDataFrame, .stTable {
+        overflow-x: auto !important;
+        display: block;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
 st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
 st.markdown("""
     <style>
@@ -304,4 +344,5 @@ elif menu == "🧾 Observations":
                         delete_observation(row['id'])
                         st.warning("Observation deleted ❌")
                         st.rerun()
+
 
