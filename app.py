@@ -4,42 +4,18 @@ import sqlite3
 import plotly.express as px
 import os
 
+# ========================================
+# 🔧 PAGE CONFIG
+# ========================================
 st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
 
-# --- Inject responsive detection script ---
-detect_script = """
-    <script>
-    const width = window.innerWidth;
-    const isMobile = width < 768;
-    window.parent.postMessage({ isMobile }, "*");
-    </script>
-"""
-st.markdown(detect_script, unsafe_allow_html=True)
-
-# Container for device detection
-if "is_mobile" not in st.session_state:
-    st.session_state.is_mobile = False
-
-# Receive width info
-st.markdown("""
-<script>
-window.addEventListener('message', (event) => {
-    if (event.data.isMobile !== undefined) {
-        window.streamlitSend({type:'streamlit:setSessionState',data:{is_mobile:event.data.isMobile}});
-    }
-});
-</script>
-""", unsafe_allow_html=True)
-
-# --- Dynamic CSS ---
+# ========================================
+# 🎨 STYLES
+# ========================================
 st.markdown("""
 <style>
 [data-testid="stToolbar"] {visibility: hidden; height: 0;}
-
-.block-container {
-    padding: 1rem 2rem;
-}
-
+.block-container {padding: 1rem 2rem;}
 @media (max-width: 768px) {
     .block-container {padding: 0.5rem 0.8rem !important;}
     .stMarkdown, .stTextInput, .stSelectbox, .stTextArea {font-size: 14px !important;}
@@ -50,7 +26,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Authentication (same as before) ---
+# ========================================
+# 🔐 AUTHENTICATION
+# ========================================
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "username" not in st.session_state:
@@ -77,17 +55,10 @@ if not st.session_state.authenticated:
             else:
                 st.error("Incorrect Username or Password")
     st.stop()
-else:
-    # Hide sidebar completely on mobile
-    if not st.session_state.is_mobile:
-        st.sidebar.markdown(f"**Connected as:** {st.session_state.username}")
-        if st.sidebar.button("🔓 Logout"):
-            st.session_state.authenticated = False
-            st.rerun()
-    else:
-        st.markdown(f"✅ Logged in as **{st.session_state.username}**")
 
-# --- DB Functions ---
+# ========================================
+# 🧩 DATABASE HELPERS
+# ========================================
 @st.cache_data
 def get_db_path():
     for path in [
@@ -112,32 +83,56 @@ def extract_price(val):
     except:
         return None
 
-# --- NAVIGATION (mobile = top menu) ---
-if st.session_state.is_mobile:
+# ========================================
+# 📱 DEVICE DETECTION (SIMPLE)
+# ========================================
+# Instead of JS message passing (unstable on Streamlit Cloud),
+# we use Streamlit's native responsive width detection.
+is_mobile = st.experimental_get_query_params().get("mobile", ["false"])[0] == "true"
+# Fallback check
+if st.session_state.get("is_mobile") is None:
+    st.session_state.is_mobile = False
+
+# ========================================
+# 🧭 NAVIGATION (Responsive)
+# ========================================
+st.markdown("### 💊 My Pharma Dashboard")
+
+if st.session_state.get("is_mobile", False):
     menu = st.selectbox(
         "📱 Navigate",
         ["🏠 Home", "💊 Products", "📊 Dashboard", "🧾 Observations"]
     )
 else:
+    st.sidebar.markdown(f"**Connected as:** {st.session_state.username}")
+    if st.sidebar.button("🔓 Logout"):
+        st.session_state.authenticated = False
+        st.rerun()
     menu = st.sidebar.radio(
         "Navigation",
         ["🏠 Home", "💊 Products", "📊 Dashboard", "🧾 Observations"]
     )
 
-# --- PAGES ---
+# ========================================
+# 🏠 HOME PAGE
+# ========================================
 if menu == "🏠 Home":
     st.title("💊 Pharma Data Platform")
     st.markdown("Welcome to the Pharmaceutical Management & Analysis Platform 📊")
 
+# ========================================
+# 💊 PRODUCTS
+# ========================================
 elif menu == "💊 Products":
     st.header("💊 List of Products")
     df = load_data()
+
     search = st.text_input("🔍 Search by name or substance")
     if search:
         df = df[df["name"].str.contains(search, case=False, na=False) |
                 df["type"].str.contains(search, case=False, na=False)]
 
-    items_per_page = 50 if st.session_state.is_mobile else 100
+    items_per_page = 30 if st.session_state.get("is_mobile") else 80
     total_pages = max(1, (len(df) - 1) // items_per_page + 1)
     page = st.number_input("Page", 1, total_pages, 1)
     subset = df.iloc[(page-1)*items_per_page : page*items_per_page]
@@ -150,6 +145,9 @@ elif menu == "💊 Products":
             if 'description' in df.columns and row.get("description"):
                 st.markdown(row["description"], unsafe_allow_html=True)
 
+# ========================================
+# 📊 DASHBOARD
+# ========================================
 elif menu == "📊 Dashboard":
     st.header("📊 Global Analysis")
     df = load_data()
@@ -158,7 +156,7 @@ elif menu == "📊 Dashboard":
     for col in ["atc", "bcs", "oeb", "bioequivalence"]:
         if col in df.columns:
             fig = px.pie(df, names=col, title=f"By {col.upper()}")
-            st.plotly_chart(fig, use_container_width=True, height=400 if st.session_state.is_mobile else 600)
+            st.plotly_chart(fig, use_container_width=True, height=400 if st.session_state.get("is_mobile") else 600)
 
     if "type" in df.columns:
         fig = px.pie(df, names="type", title="Therapeutical Classes")
@@ -169,6 +167,9 @@ elif menu == "📊 Dashboard":
         fig = px.bar(top10, x="name", y="Prix_num", title="Top 10 Most Expensive Medicines")
         st.plotly_chart(fig, use_container_width=True)
 
+# ========================================
+# 🧾 OBSERVATIONS
+# ========================================
 elif menu == "🧾 Observations":
     st.header("🩺 Commercial & Medical Observations")
 
@@ -214,5 +215,3 @@ elif menu == "🧾 Observations":
         for _, row in df_obs.iterrows():
             with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                 st.write(row['comment'])
-
-
