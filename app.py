@@ -9,39 +9,56 @@ import os
 # ---------------------------
 st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
 
-st.markdown(
-    """
-    <style>
-    /* Hide default Streamlit sidebar and toolbar */
-    [data-testid="stSidebar"] {display: none;}
-    [data-testid="stToolbar"] {visibility: hidden; height: 0;}
+st.markdown("""
+<style>
+/* --- Remove Streamlit default header and toolbar completely --- */
+[data-testid="stHeader"] {display: none !important;}
+[data-testid="stToolbar"] {display: none !important;}
+header {display: none !important;}
 
-    /* Fix hidden header overlap: add top padding */
+/* --- Hide sidebar (we use dropdown for mobile) --- */
+[data-testid="stSidebar"] {display: none !important;}
+
+/* --- Ensure main container is fully visible from top --- */
+[data-testid="stAppViewContainer"] > .main {
+    margin-top: 0 !important;
+    padding-top: 2.5rem !important;  /* ensures visible space at the top */
+}
+
+/* --- Global layout adjustments --- */
+.block-container {
+    padding: 1rem 2rem !important;
+}
+
+/* --- Responsive adjustments for mobile --- */
+@media (max-width: 768px) {
     [data-testid="stAppViewContainer"] > .main {
-        padding-top: 4rem !important;
+        padding-top: 1.8rem !important;
     }
-
-    /* General container padding */
-    .block-container { padding: 1rem 2rem; }
-
-    /* Make sure the first title is visible on small screens */
-    @media (max-width: 768px) {
-        [data-testid="stAppViewContainer"] > .main {
-            padding-top: 3rem !important;
-        }
-        .block-container { padding: 0.5rem 0.8rem !important; }
-        .stButton>button { width: 100% !important; }
-        .stTextInput input, .stTextArea textarea { font-size: 14px !important; }
-        .stExpander { margin-bottom: 0.6rem !important; }
-        h1, h2, h3 { font-size: 1.1rem !important; }
+    .block-container {
+        padding: 0.6rem 1rem !important;
     }
+    .stButton>button {
+        width: 100% !important;
+    }
+    .stMarkdown, .stTextInput, .stSelectbox, .stTextArea {
+        font-size: 14px !important;
+    }
+    .stExpander {
+        margin-bottom: 0.8rem !important;
+    }
+    h1, h2, h3 {
+        font-size: 1.1rem !important;
+    }
+}
 
-    /* Optional: make dataframes horizontally scrollable */
-    .stDataFrame, .stTable { overflow-x: auto !important; display: block; }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+/* Optional: make dataframes and charts responsive */
+.stDataFrame, .stTable {
+    overflow-x: auto !important;
+    display: block !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
 # ---------------------------
@@ -271,6 +288,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
