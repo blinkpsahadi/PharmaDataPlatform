@@ -208,7 +208,9 @@ with main_col:
             if "description" in df.columns and row.get("description"):
                     st.markdown("**Description:**", unsafe_allow_html=True)
                     st.markdown(row["description"], unsafe_allow_html=True)
-
+                # Separator for visual clarity
+            st.markdown("---")
+    
 
     # =========================
     # DASHBOARD
@@ -296,6 +298,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
