@@ -44,18 +44,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
-st.markdown("""
-    <style>
-    /* Hide the "View source" GitHub banner */
-    [data-testid="stToolbar"] {
-        visibility: hidden;
-        height: 0;
-        position: fixed;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 # =========================
 # 🔐 AUTHENTIFICATION
 # =========================
@@ -98,11 +86,10 @@ else:
 
 @st.cache_data
 def get_db_path():
-    """Trouve dynamiquement le chemin vers la base SQLite, même dans Streamlit Cloud."""
     try:
         base_dir = os.path.dirname(os.path.abspath(__file__))
     except NameError:
-        base_dir = os.getcwd()  # fallback si __file__ non défini
+        base_dir = os.getcwd()
 
     possible_paths = [
         os.path.join(base_dir, "data", "all_pharma.db"),
@@ -110,14 +97,12 @@ def get_db_path():
         "data/all_pharma.db",
         "all_pharma.db",
     ]
-
     for path in possible_paths:
         if os.path.exists(path):
             return path
 
-    st.error("❌ Database not found. Place 'all_pharma.db' in the folder `data/`.")
+    st.error("❌ Database not found. Place 'all_pharma.db' in `data/` folder.")
     st.stop()
-
 
 @st.cache_data
 def load_data():
@@ -131,7 +116,6 @@ def load_data():
     finally:
         conn.close()
     return df
-
 
 def extraire_prix(val):
     try:
@@ -150,47 +134,46 @@ menu = st.sidebar.radio(
     ["🏠 Home", "💊 Products", "📊 Dashboard", "🧾 Observations"]
 )
 
-if menu == "🚪 Logout":
-    st.session_state.authenticated = False
-    st.rerun()
-
 # =========================
-# 🏠 ACCUEIL
+# 🏠 HOME
 # =========================
 if menu == "🏠 Home":
     st.title("💊 Pharma Data Platform")
-    st.markdown("Welcome to the Pharmaceutical Managment & Analysis Pharma Data Platform 📊")
+    st.markdown("""
+        Welcome to the Pharmaceutical Management & Analysis Platform 📊  
+        This app adapts automatically to your screen — PC, tablet, or smartphone.  
+    """)
 
 # =========================
-# 💊 PRODUITS
+# 💊 PRODUCTS
 # =========================
 elif menu == "💊 Products":
-    st.header("💊 List of products")
+    st.header("💊 List of Products")
 
     df = load_data()
 
-    # Recherche
-    search = st.text_input("🔍 Research by name, or substance.")
+    # Search
+    search = st.text_input("🔍 Search by name or substance")
 
     if search:
         df = df[df["name"].str.contains(search, case=False, na=False) |
                 df["type"].str.contains(search, case=False, na=False)]
 
-    # Pagination
-    items_per_page = 100
+    # Pagination (dynamic per device)
+    items_per_page = 50 if st.runtime.scriptrunner.script_run_context.is_running_with_streamlit else 100
     total_pages = (len(df) // items_per_page) + 1
     page = st.number_input("Page", min_value=1, max_value=total_pages, value=1)
     start, end = (page - 1) * items_per_page, page * items_per_page
     subset = df.iloc[start:end]
 
-    # Affichage des produits
+    # Mobile-friendly expander
     for _, row in subset.iterrows():
         with st.expander(f"💊 {row['name']}"):
-            st.markdown(f"**ATC :** {row.get('atc', 'N/A')}")
-            st.markdown(f"**Type :** {row.get('type', 'N/A')}")
-            st.markdown(f"**Price :** {row.get('price', 'N/A')}")
+            st.markdown(f"**ATC:** {row.get('atc', 'N/A')}")
+            st.markdown(f"**Type:** {row.get('type', 'N/A')}")
+            st.markdown(f"**Price:** {row.get('price', 'N/A')}")
             if 'description' in df.columns and row.get("description"):
-                st.markdown("**Description :**", unsafe_allow_html=True)
+                st.markdown("**Description:**", unsafe_allow_html=True)
                 st.markdown(row["description"], unsafe_allow_html=True)
             st.markdown("---")
 
@@ -280,7 +263,7 @@ elif menu == "🧾 Observations":
         conn.commit()
         conn.close()
 
-    # ====== INTERFACE ======
+    # --- UI ---
     st.header("🩺 Commercial & Medical Observations")
     init_db()
     products = get_all_products()
@@ -288,7 +271,7 @@ elif menu == "🧾 Observations":
     st.subheader("➕ Add a New Observation")
 
     with st.form("new_obs_form", clear_on_submit=True):
-        col1, col2 = st.columns([2, 1])
+        col1, col2 = st.columns([2, 1]) if st.session_state.get("is_desktop", True) else st.columns(1)
         with col1:
             selected_product = st.selectbox(
                 "Choose or Type a product",
@@ -333,7 +316,7 @@ elif menu == "🧾 Observations":
             with st.expander(f"🧾 {row['product_name']} ({row['type']}) - {row['date']}"):
                 st.write(row['comment'])
                 new_comment = st.text_area("✏️ Edit comment", row['comment'], key=f"edit_{row['id']}")
-                colA, colB = st.columns(2)
+                colA, colB = st.columns(2) if st.session_state.get("is_desktop", True) else st.columns(1)
                 with colA:
                     if st.button("💾 Update", key=f"update_{row['id']}"):
                         update_observation(row['id'], new_comment)
@@ -344,5 +327,4 @@ elif menu == "🧾 Observations":
                         delete_observation(row['id'])
                         st.warning("Observation deleted ❌")
                         st.rerun()
-
 
