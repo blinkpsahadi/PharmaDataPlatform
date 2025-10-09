@@ -9,21 +9,26 @@ import os
 # ---------------------------
 st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
 
-# ---------------------------
-# STYLES: hide default sidebar & toolbar, mobile-friendly padding
-# ---------------------------
 st.markdown(
     """
     <style>
-    /* Hide default Streamlit sidebar and top toolbar (keeps UI consistent) */
+    /* Hide default Streamlit sidebar and toolbar */
     [data-testid="stSidebar"] {display: none;}
     [data-testid="stToolbar"] {visibility: hidden; height: 0;}
+
+    /* Fix hidden header overlap: add top padding */
+    [data-testid="stAppViewContainer"] > .main {
+        padding-top: 4rem !important;
+    }
 
     /* General container padding */
     .block-container { padding: 1rem 2rem; }
 
-    /* Small screens tweaks */
+    /* Make sure the first title is visible on small screens */
     @media (max-width: 768px) {
+        [data-testid="stAppViewContainer"] > .main {
+            padding-top: 3rem !important;
+        }
         .block-container { padding: 0.5rem 0.8rem !important; }
         .stButton>button { width: 100% !important; }
         .stTextInput input, .stTextArea textarea { font-size: 14px !important; }
@@ -37,6 +42,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 # ---------------------------
 # AUTHENTICATION
@@ -265,5 +271,6 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
