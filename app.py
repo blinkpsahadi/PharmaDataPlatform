@@ -160,10 +160,10 @@ with left_col:
 
     st.markdown("---")
     st.markdown(f"**Connected as:**  \n`{st.session_state.username}`")
- if st.sidebar.button("Logout", use_container_width=True):
-    st.session_state.authenticated = False
-    st.session_state.username = ""
-    st.rerun()
+        if st.sidebar.button("Logout", use_container_width=True):
+            st.session_state.authenticated = False
+            st.session_state.username = ""
+            st.rerun()
 
 # Main content area
 with main_col:
@@ -298,6 +298,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
