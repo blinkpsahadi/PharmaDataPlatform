@@ -336,20 +336,21 @@ with main_col:
         df_obs = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
         conn.close()
 
-    if df_obs.empty:
-            st.info("No observations yet.")
-    else:
-            # pagination for observations
-            page_size = 10
-            total_pages = max(1, (len(df_obs) - 1) // page_size + 1)
-            page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
-            start = (page - 1) * page_size
-            end = start + page_size
-            page_df = df_obs.iloc[start:end]
+        if df_obs.empty:
+                st.info("No observations yet.")
+        else:
+                # pagination for observations
+                page_size = 10
+                total_pages = max(1, (len(df_obs) - 1) // page_size + 1)
+                page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
+                start = (page - 1) * page_size
+                end = start + page_size
+                page_df = df_obs.iloc[start:end]
+    
+                for _, row in page_df.iterrows():
+                    with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
+                        st.write(row["comment"])
 
-            for _, row in page_df.iterrows():
-                with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
-                    st.write(row["comment"])
 
 
 
