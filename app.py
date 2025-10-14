@@ -136,6 +136,20 @@ def load_data():
     conn.close()
     return df
 
+def ensure_observation_column():
+    db = get_db_path()
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(drugs);")
+    columns = [info[1] for info in cursor.fetchall()]
+    if "Observations" not in columns:
+        cursor.execute("ALTER TABLE drugs ADD COLUMN Observations TEXT;")
+        conn.commit()
+    conn.close()
+
+# Call once at startup
+ensure_observation_column()
+
 def extract_price(val):
     try:
         if pd.isna(val): return None
@@ -200,8 +214,11 @@ with main_col:
     # =========================
     elif menu == "💊 Products":
         st.header("💊 List of Products")
-        df = load_data()
-
+        db_path = get_db_path()
+        conn = sqlite3.connect(db_path)
+        df = pd.read_sql_query("SELECT * FROM drugs", conn)
+        conn.close()
+    
         search = st.text_input("🔍 Search by name or substance")
         if search:
             search_cols = ["name", "type", "scientific_name"]
@@ -210,14 +227,12 @@ with main_col:
             for c in available_cols:
                 mask |= df[c].astype(str).str.contains(search, case=False, na=False)
             df = df[mask]
-
-
-        # A moderate page size that works on both desktop and mobile
+    
         items_per_page = 50
         total_pages = max(1, (len(df) - 1) // items_per_page + 1)
         page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
         subset = df.iloc[(page - 1) * items_per_page : page * items_per_page]
-
+    
         for _, row in subset.iterrows():
             with st.expander(f"💊 {row['name']}"):
                 st.write(f"**Scientific name:** {row.get('scientific_name', 'N/A')}")
@@ -227,9 +242,20 @@ with main_col:
                 if "description" in df.columns and row.get("description"):
                     st.markdown("**Description:**", unsafe_allow_html=True)
                     st.markdown(row["description"], unsafe_allow_html=True)
-                # Separator for visual clarity
-                st.markdown("---")
     
+                # 💬 Observations section per product
+                current_obs = row.get("Observations", "")
+                st.markdown("### 🩺 Observation")
+                new_obs = st.text_area("Add or edit observation", current_obs, key=f"obs_{row['id']}")
+                if st.button(f"💾 Save Observation for {row['name']}", key=f"save_obs_{row['id']}"):
+                    conn = sqlite3.connect(db_path)
+                    conn.execute("UPDATE drugs SET Observations = ? WHERE id = ?", (new_obs, row["id"]))
+                    conn.commit()
+                    conn.close()
+                    st.success(f"✅ Observation for **{row['name']}** updated successfully!")
+                    st.experimental_rerun()
+    
+                st.markdown("---")
 
     # =========================
     # DASHBOARD
@@ -293,10 +319,17 @@ with main_col:
                     "INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
                     (product, obs_type, comment)
                 )
-                conn.commit()
-                conn.close()
-                st.success("✅ Observation saved.")
-                st.experimental_rerun()
+            
+                # 🔁 NEW: Also update the 'drugs' table Observations column
+                conn.execute(
+                    "UPDATE drugs SET Observations = ? WHERE name = ?",
+                    (comment, product)
+                )
+
+    conn.commit()
+    conn.close()
+    st.success("✅ Observation saved and linked to product.")
+    st.experimental_rerun()
 
         st.markdown("---")
         conn = sqlite3.connect(db_path)
@@ -317,6 +350,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
