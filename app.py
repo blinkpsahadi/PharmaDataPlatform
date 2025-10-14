@@ -210,15 +210,22 @@ with main_col:
         st.markdown("Welcome to the Pharmaceutical Management & Analysis Platform 📊")
 
     # =========================
-    # PRODUCTS
+    # 💊 PRODUCTS
     # =========================
     elif menu == "💊 Products":
         st.header("💊 List of Products")
+        df = load_data()
+    
+        # Ensure Observations column exists in the database
         db_path = get_db_path()
         conn = sqlite3.connect(db_path)
-        df = pd.read_sql_query("SELECT * FROM drugs", conn)
+        cols = pd.read_sql_query("PRAGMA table_info(drugs);", conn)
+        if "Observations" not in cols["name"].values:
+            conn.execute("ALTER TABLE drugs ADD COLUMN Observations TEXT;")
+            conn.commit()
         conn.close()
     
+        # 🔍 Search bar
         search = st.text_input("🔍 Search by name or substance")
         if search:
             search_cols = ["name", "type", "scientific_name"]
@@ -228,32 +235,32 @@ with main_col:
                 mask |= df[c].astype(str).str.contains(search, case=False, na=False)
             df = df[mask]
     
+        # 📄 Pagination
         items_per_page = 50
         total_pages = max(1, (len(df) - 1) // items_per_page + 1)
         page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
         subset = df.iloc[(page - 1) * items_per_page : page * items_per_page]
     
+        # 💊 Product display
         for _, row in subset.iterrows():
             with st.expander(f"💊 {row['name']}"):
                 st.write(f"**Scientific name:** {row.get('scientific_name', 'N/A')}")
                 st.write(f"**ATC:** {row.get('atc', 'N/A')}")
                 st.write(f"**Type:** {row.get('type', 'N/A')}")
                 st.write(f"**Price:** {row.get('price', 'N/A')}")
-                if "description" in df.columns and row.get("description"):
-                    st.markdown("**Description:**", unsafe_allow_html=True)
-                    st.markdown(row["description"], unsafe_allow_html=True)
     
-                # 💬 Observations section per product
-                current_obs = row.get("Observations", "")
-                st.markdown("### 🩺 Observation")
-                new_obs = st.text_area("Add or edit observation", current_obs, key=f"obs_{row['id']}")
-                if st.button(f"💾 Save Observation for {row['name']}", key=f"save_obs_{row['id']}"):
-                    conn = sqlite3.connect(db_path)
-                    conn.execute("UPDATE drugs SET Observations = ? WHERE id = ?", (new_obs, row["id"]))
-                    conn.commit()
-                    conn.close()
-                    st.success(f"✅ Observation for **{row['name']}** updated successfully!")
-                    st.experimental_rerun()
+                # 🩺 Observation section (read-only)
+                obs_text = row.get("Observations", "")
+                st.markdown("**🩺 Observation:**")
+                if obs_text and str(obs_text).strip() != "":
+                    st.info(obs_text)
+                else:
+                    st.write("_No observation recorded for this product._")
+    
+                # 📄 Description section
+                if "description" in df.columns and row.get("description"):
+                    st.markdown("**📄 Description:**", unsafe_allow_html=True)
+                    st.markdown(row["description"], unsafe_allow_html=True)
     
                 st.markdown("---")
 
@@ -352,6 +359,7 @@ with main_col:
                                 st.write(row["comment"])
         
     
+
 
 
 
