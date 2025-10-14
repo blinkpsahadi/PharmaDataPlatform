@@ -278,11 +278,11 @@ with main_col:
                 fig = px.pie(df, names=col, title=f"By {col.upper()}")
                 st.plotly_chart(fig, use_container_width=True)
     
-            if "type" in df.columns:
+        if "type" in df.columns:
                 fig_class = px.pie(df, names="type", title="Therapeutical Classes")
                 st.plotly_chart(fig_class, use_container_width=True)
     
-            if df["Prix_num"].notna().any():
+        if df["Prix_num"].notna().any():
                 top10 = df.nlargest(10, "Prix_num")
                 fig = px.bar(top10, x="name", y="Prix_num", title="Top 10 Most Expensive Medicines")
                 st.plotly_chart(fig, use_container_width=True)
@@ -359,6 +359,7 @@ with main_col:
                                 st.write(row["comment"])
         
     
+
 
 
 
