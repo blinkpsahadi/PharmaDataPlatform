@@ -331,10 +331,10 @@ with main_col:
     st.success("✅ Observation saved and linked to product.")
     st.experimental_rerun()
 
-        st.markdown("---")
-        conn = sqlite3.connect(db_path)
-        df_obs = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
-        conn.close()
+    st.markdown("---")
+    conn = sqlite3.connect(db_path)
+    df_obs = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
+    conn.close()
 
         if df_obs.empty:
             st.info("No observations yet.")
@@ -350,6 +350,7 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
 
 
