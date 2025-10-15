@@ -263,7 +263,7 @@ with main_col:
                     st.markdown(row["description"], unsafe_allow_html=True)
     
                 st.markdown("---")
-
+    
     # =========================
     # DASHBOARD
     # =========================
@@ -272,13 +272,22 @@ with main_col:
     
         df = load_data()
     
-        # Ensure price is numeric where possible
-        df["Prix_num"] = df["price"].apply(extract_price)
+        # --- Ensure numeric extraction from 'price' ---
+        def safe_extract(val):
+            import re
+            try:
+                # Extract only the numeric part (e.g., 25.0 from "25.0 EGP")
+                val_str = str(val)
+                match = re.search(r"[\d,.]+", val_str)
+                return float(match.group().replace(",", "")) if match else None
+            except Exception:
+                return None
     
-        # Remove empty/NaN text fields
+        df["Prix_num"] = df["price"].apply(safe_extract)
+    
         df = df.fillna("")
     
-        # --- Pie charts safely ---
+        # --- Pie charts ---
         for col in ["atc", "bcs", "oeb", "bioequivalence"]:
             if col in df.columns:
                 valid = df[df[col].astype(str).str.strip() != ""]
@@ -298,15 +307,18 @@ with main_col:
                 st.info("No valid data for therapeutical classes.")
     
         # --- Price visualizations ---
-        if df["Prix_num"].notna().any():
+        valid_prices = df[pd.to_numeric(df["Prix_num"], errors="coerce").notna()].copy()
+        valid_prices["Prix_num"] = valid_prices["Prix_num"].astype(float)
+    
+        if not valid_prices.empty:
             # Top 10 most expensive
-            top10 = df.nlargest(10, "Prix_num")
+            top10 = valid_prices.nlargest(10, "Prix_num")
             if not top10.empty:
                 fig = px.bar(top10, x="name", y="Prix_num", title="Top 10 Most Expensive Medicines")
                 st.plotly_chart(fig, use_container_width=True)
     
             # Histogram
-            fig = px.histogram(df[df["Prix_num"].notna()], x="Prix_num", nbins=20, title="Price Distribution")
+            fig = px.histogram(valid_prices, x="Prix_num", nbins=20, title="Price Distribution")
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No valid numeric price data to display.")
@@ -380,6 +392,7 @@ with main_col:
                                 st.write(row["comment"])
         
     
+
 
 
 
