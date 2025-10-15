@@ -264,31 +264,52 @@ with main_col:
     
                 st.markdown("---")
 
-    # =========================
-    # DASHBOARD
-    # =========================
-    elif menu == "📊 Dashboard":
-        st.header("📊 Global Analysis")
-        df = load_data()
-        df["Prix_num"] = df["price"].apply(extract_price)
+# =========================
+# DASHBOARD
+# =========================
+elif menu == "📊 Dashboard":
+    st.header("📊 Global Analysis")
 
-        # Charts use container width so they resize on phones automatically
-        for col in ["atc", "bcs", "oeb", "bioequivalence"]:
-            if col in df.columns:
-                fig = px.pie(df, names=col, title=f"By {col.upper()}")
+    df = load_data()
+
+    # Ensure price is numeric where possible
+    df["Prix_num"] = df["price"].apply(extract_price)
+
+    # Remove empty/NaN text fields
+    df = df.fillna("")
+
+    # --- Pie charts safely ---
+    for col in ["atc", "bcs", "oeb", "bioequivalence"]:
+        if col in df.columns:
+            valid = df[df[col].astype(str).str.strip() != ""]
+            if not valid.empty:
+                fig = px.pie(valid, names=col, title=f"By {col.upper()}")
                 st.plotly_chart(fig, use_container_width=True)
-    
-        if "type" in df.columns:
-                fig_class = px.pie(df, names="type", title="Therapeutical Classes")
-                st.plotly_chart(fig_class, use_container_width=True)
-    
-        if df["Prix_num"].notna().any():
-                top10 = df.nlargest(10, "Prix_num")
-                fig = px.bar(top10, x="name", y="Prix_num", title="Top 10 Most Expensive Medicines")
-                st.plotly_chart(fig, use_container_width=True)
-    
-                fig = px.histogram(df, x="Prix_num", nbins=20, title="Price Distribution")
-                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info(f"No valid data for {col.upper()}")
+
+    # --- Type pie chart ---
+    if "type" in df.columns:
+        valid_type = df[df["type"].astype(str).str.strip() != ""]
+        if not valid_type.empty:
+            fig_class = px.pie(valid_type, names="type", title="Therapeutical Classes")
+            st.plotly_chart(fig_class, use_container_width=True)
+        else:
+            st.info("No valid data for therapeutical classes.")
+
+    # --- Price visualizations ---
+    if df["Prix_num"].notna().any():
+        # Top 10 most expensive
+        top10 = df.nlargest(10, "Prix_num")
+        if not top10.empty:
+            fig = px.bar(top10, x="name", y="Prix_num", title="Top 10 Most Expensive Medicines")
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Histogram
+        fig = px.histogram(df[df["Prix_num"].notna()], x="Prix_num", nbins=20, title="Price Distribution")
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info("No valid numeric price data to display.")
 
     # =========================
     # OBSERVATIONS
@@ -359,6 +380,7 @@ with main_col:
                                 st.write(row["comment"])
         
     
+
 
 
 
