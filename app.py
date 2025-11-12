@@ -1,353 +1,352 @@
-# -*- coding: utf-8 -*-
-"""
-Script Python pour Google Colab : Analyse des Immunosuppresseurs
-Ce script lit les données Excel (.xlsx), génère des visualisations interactives
-avec Plotly et les enregistre dans un fichier HTML.
-"""
-
+import streamlit as st
 import pandas as pd
+import sqlite3
 import plotly.express as px
-from plotly.offline import plot
-from plotly.subplots import make_subplots
-import plotly.graph_objects as go
 import os
-from datetime import datetime
+import re
 
-# --- 1. CONFIGURATION ET NETTOYAGE DES DONNÉES ---
+# ---------------------------
+# PAGE CONFIG
+# ---------------------------
+st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
 
-# Nom du fichier téléchargé sur Colab
-# IMPORTANT: Utilisation du nom du fichier Excel original
-# NOTE: Le nom du fichier a été ajusté en fonction de l'artefact détecté :
-FILE_NAME = "CLASSIFICATION_DES_IMMUNOSUPRESSEURS_ATC_DDD_NOMENCLATURE.xlsx"
-OUTPUT_HTML_FILE = "rapport_immunsuppresseurs.html"
+st.markdown("""
+<style>
+[data-testid="stHeader"], [data-testid="stToolbar"], header {display: none !important;}
+[data-testid="stSidebar"] {display: none !important;}
+[data-testid="stAppViewContainer"] > .main {
+    margin-top: 0 !important;
+    padding-top: 2.5rem !important;
+}
+.block-container { padding: 1rem 2rem !important; }
 
-# Assurez-vous d'avoir installé les dépendances si vous utilisez un nouvel environnement :
-# !pip install pandas plotly openpyxl
+@media (max-width: 768px) {
+    [data-testid="stAppViewContainer"] > .main { padding-top: 1.8rem !important; }
+    .block-container { padding: 0.6rem 1rem !important; }
+    .stButton>button { width: 100% !important; }
+    .stMarkdown, .stTextInput, .stSelectbox, .stTextArea { font-size: 14px !important; }
+    .stExpander { margin-bottom: 0.8rem !important; }
+    h1, h2, h3 { font-size: 1.1rem !important; }
+}
+.stDataFrame, .stTable {
+    overflow-x: auto !important;
+    display: block !important;
+}
+</style>
+""", unsafe_allow_html=True)
 
-def load_and_prepare_data(file_path):
-    """Charge le fichier Excel, gère les lignes d'en-tête et normalise les colonnes."""
-    print(f"Chargement du fichier : {file_path}")
+# =========================
+# 🔐 AUTHENTICATION
+# =========================
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+if "username" not in st.session_state:
+    st.session_state.username = ""
 
-    # Lecture du fichier Excel (.xlsx) avec openpyxl
-    # Nous lisons la première feuille (sheet_name=0) et définissons la deuxième ligne (index 1) comme l'en-tête.
-    df = pd.read_excel(file_path, header=1, sheet_name=0)
+if "credentials" in st.secrets:
+    USERS = dict(st.secrets["credentials"])
+else:
+    USERS = {"admin": "password"} # Default local user for testing
 
-    # Nettoyage de base : retirer les lignes entièrement vides
-    df.dropna(how='all', inplace=True)
+def check_password(username, password):
+    return username in USERS and USERS[username] == password
 
-    # --- VÉRIFICATION DES NOMS DE COLONNES ET RENOMMAGE ---
-    # Dictionnaire de mappage des colonnes : {Nom EXACT dans Excel : Nom standard utilisé dans le script}
-    column_mapping = {
-        'DCI': 'DCI',
-        'Forme': 'Forme',
-        'Laboratoire Fabricant': 'Laboratoire Fabricant',
-        'Nomenclature': 'Nomenclature',
-        'INDICATION': 'Indication', # Renomme 'INDICATION' (majuscules) en 'Indication' (casse standard)
-        'Type de Classification': 'Type de Classification', # Le nom exact trouvé
-    }
+if not st.session_state.authenticated:
+    with st.form("login_form"):
+        st.markdown("## 🔒 Connection")
+        user = st.text_input("Username")
+        pwd = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+        if submitted:
+            if check_password(user, pwd):
+                st.session_state.authenticated = True
+                st.session_state.username = user
+                st.success(f"Welcome {user} 👋")
+                st.rerun()
+            else:
+                st.error("Incorrect Password or Username")
+    st.stop()
+else:
+    st.sidebar.markdown(f"**Connected as :** {st.session_state.username}")
+    if st.sidebar.button("🔓 Logout"):
+        st.session_state.authenticated = False
+        st.session_state.username = ""
+        st.rerun()
 
-    rename_dict = {}
-    found_cols = df.columns.tolist()
+# ---------------------------
+# DB HELPERS
+# ---------------------------
+@st.cache_data
+def get_db_path():
+    possible = [
+        os.path.join(os.getcwd(), "data", "all_pharma.db"),
+        "data/all_pharma.db",
+        "all_pharma.db",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "all_pharma.db")
+    ]
+    for p in possible:
+        if os.path.exists(p):
+            return p
+    st.error("❌ Database not found. Place 'all_pharma.db' in the `data/` folder or next to the app.")
+    st.stop()
 
-    print("Noms des colonnes trouvées après chargement :", found_cols)
+@st.cache_data
+def load_data():
+    db = get_db_path()
+    conn = sqlite3.connect(db)
+    try:
+        df = pd.read_sql_query("SELECT * FROM drugs", conn)
+    except Exception as e:
+        conn.close()
+        st.error(f"Error loading 'drugs' table: {e}")
+        st.stop()
+    conn.close()
+    return df
 
-    required_cols_to_map = list(column_mapping.keys())
+def ensure_observation_column():
+    db = get_db_path()
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(drugs);")
+    columns = [info[1] for info in cursor.fetchall()]
+    if "Observations" not in columns:
+        cursor.execute("ALTER TABLE drugs ADD COLUMN Observations TEXT;")
+        conn.commit()
+    conn.close()
 
-    for excel_name, script_name in column_mapping.items():
-        # Trouver la colonne exacte
-        if excel_name in found_cols:
-            rename_dict[excel_name] = script_name
-        # Gérer le cas où la casse diffère (ex: 'indication' au lieu de 'INDICATION')
-        elif excel_name.upper() in found_cols and excel_name.upper() != excel_name:
-            rename_dict[excel_name.upper()] = script_name
-        # Gérer le cas où la colonne est en minuscule
-        elif excel_name.lower() in found_cols and excel_name.lower() != excel_name:
-            rename_dict[excel_name.lower()] = script_name
+ensure_observation_column()
 
+# ---------------------------
+# APP NAVIGATION
+# ---------------------------
+menu_options = ["🏠 Home", "💊 Products", "📊 Dashboard", "🧾 Observations"]
+left_col, main_col = st.columns([1, 4], gap="small")
 
-    # --- Vérification critique que les colonnes nécessaires sont présentes ---
-    # On vérifie que les clés standardisées (les valeurs du dictionnaire de mapping) existent dans le df après renommage simulé
-    current_cols = set(found_cols)
-    for excel_name, script_name in column_mapping.items():
-        if excel_name in rename_dict:
-            current_cols.add(script_name)
+with left_col:
+    st.markdown("### 💊 Navigation")
+    if "nav_selection" not in st.session_state:
+        st.session_state.nav_selection = menu_options[0]
+    selected_index = menu_options.index(st.session_state.nav_selection)
+    st.session_state.nav_selection = st.radio(
+        "Menu", menu_options, index=selected_index, key="nav_selection_radio"
+    )
+    st.markdown("---")
+    st.markdown(f"**Connected as:** `{st.session_state.username}`")
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.authenticated = False
+        st.session_state.username = ""
+        st.rerun()
 
-    missing_cols = [script_name for excel_name, script_name in column_mapping.items() if script_name not in current_cols]
+with main_col:
+    menu = st.session_state.get("nav_selection", menu_options[0])
 
-    if missing_cols:
-        raise ValueError(f"Colonnes manquantes ou mal nommées après la vérification. Les colonnes requises dans le script sont : {list(column_mapping.values())}. Colonnes trouvées (initiales) : {found_cols}")
+    # HOME
+    if menu == "🏠 Home":
+        st.title("💊 Pharma Data Platform")
+        st.markdown("Welcome to the Pharmaceutical Management & Analysis Platform 📊")
 
-    df.rename(columns=rename_dict, inplace=True)
+    # PRODUCTS
+    elif menu == "💊 Products":
+        st.header("💊 List of Products")
+        df = load_data()
 
-    # Remplacement des valeurs manquantes (NaN) par une chaîne claire pour les graphiques
-    df.fillna({'Laboratoire Fabricant': 'Non Spécifié', 'Indication': 'Non Spécifiée', 'Nomenclature': 'Non Spécifié', 'DCI': 'Non Spécifiée'}, inplace=True)
+        search = st.text_input("🔍 Search by name or substance")
+        if search:
+            search_cols = ["name", "type", "scientific_name"]
+            available_cols = [c for c in search_cols if c in df.columns]
+            mask = False
+            for c in available_cols:
+                mask |= df[c].astype(str).str.contains(search, case=False, na=False)
+            df = df[mask]
 
-    # Conversion des colonnes de texte en chaînes et suppression des espaces blancs
-    cols_to_clean = ['Forme', 'Indication', 'Laboratoire Fabricant', 'Nomenclature', 'Type de Classification', 'DCI']
-    for col in cols_to_clean:
-        if col in df.columns:
-            # Nettoyage et capitalisation des premières lettres
-            df[col] = df[col].astype(str).str.strip()
-            df[col] = df[col].apply(lambda x: x.capitalize() if x.lower() not in ['nan', 'non spécifié'] else x)
+        items_per_page = 50
+        total_pages = max(1, (len(df) - 1) // items_per_page + 1)
+        page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
+        subset = df.iloc[(page - 1) * items_per_page : page * items_per_page]
 
-    # --- AJOUT DU NETTOYAGE SPÉCIFIQUE POUR LA NOMENCLATURE ---
-    if 'Nomenclature' in df.columns:
-        # Remplacer les chaînes vides (qui ne sont pas NaN) par 'Non Spécifié'
-        df['Nomenclature'].replace('', 'Non Spécifié', inplace=True)
-        # Assurer l'uniformité de la casse pour les valeurs clés
-        df['Nomenclature'] = df['Nomenclature'].apply(lambda x: x.capitalize() if isinstance(x, str) else x)
-    # --------------------------------------------------------
+        for _, row in subset.iterrows():
+            with st.expander(f"💊 {row['name']}"):
+                # Tentative de récupération de Code_ATC, car le nom de colonne peut varier
+                atc_code = row.get('Code ATC', row.get('Code_ATC', 'N/A')) 
+                
+                st.write(f"**Scientific name:** {row.get('scientific_name', 'N/A')}")
+                st.write(f"**Code ATC:** {atc_code}")
+                st.write(f"**Type:** {row.get('type', 'N/A')}")
+                st.write(f"**Price:** {row.get('price', 'N/A')}")
+                obs_text = row.get("Observations", "")
+                st.markdown("**🩺 Observation:**")
+                if obs_text and str(obs_text).strip() != "":
+                    st.info(obs_text)
+                else:
+                    st.write("_No observation recorded for this product._")
 
-    print(f"Données chargées. Nombre de lignes après nettoyage : {len(df)}")
-    return df
+    # DASHBOARD
+    elif menu == "📊 Dashboard":
+        st.header("📊 Global Analysis")
+        df = load_data()
+        
+        # Helper pour extraire le prix numérique
+        def safe_extract(val):
+            try:
+                # Extrait le premier nombre flottant (supporte les virgules comme séparateur décimal)
+                match = re.search(r"[\d]+[.,]?[\d]*", str(val))
+                return float(match.group().replace(",", ".")) if match else None
+            except Exception:
+                return None
+                
+        df["Prix_num"] = df["price"].apply(safe_extract)
+        df = df.fillna("")
 
-# --- 2. FONCTIONS DE CRÉATION DE GRAPHIQUES ---
+        # --- 1. Distributions Catégorielles (Bar Charts & Pie Charts) ---
+        st.subheader("Distribution des Produits par Classification")
+        
+        categorical_cols = ["Code ATC", "bcs", "oeb", "bioequivalence"]
+        cols = st.columns(2)
+        col_index = 0
+        
+        for col in categorical_cols:
+            # Tente d'utiliser Code_ATC si Code ATC n'existe pas
+            col_key = col if col in df.columns else (col.replace(" ", "_") if col == "Code ATC" and "Code_ATC" in df.columns else None)
+            
+            if col_key and col_key in df.columns:
+                valid = df[df[col_key].astype(str).str.strip() != ""]
+                
+                if not valid.empty:
+                    # Utilisation du Bar Chart pour une meilleure comparaison
+                    count_df = valid.groupby(col_key).size().reset_index(name='Count')
+                    
+                    if len(count_df) > 10:
+                        count_df = count_df.nlargest(10, 'Count')
+                        title = f"Top 10 : {col.upper()}"
+                    else:
+                        title = f"Distribution par {col.upper()}"
+                    
+                    fig = px.bar(
+                        count_df, 
+                        x=col_key, 
+                        y='Count', 
+                        title=title,
+                        color=col_key,
+                        template='plotly_white'
+                    )
+                    
+                    with cols[col_index % 2]:
+                        st.plotly_chart(fig, use_container_width=True)
+                    col_index += 1
 
-def create_count_chart(df, column, chart_type='bar'):
-    """
-    Crée un graphique de comptage (Barre ou Camembert) pour une colonne catégorielle,
-    avec la liste des DCI affichée au survol.
-    """
+        # Classes Thérapeutiques (Pie Chart) - Utilisation du reste de l'espace si col_index est impair
+        if "type" in df.columns:
+            valid_type = df[df["type"].astype(str).str.strip() != ""]
+            if not valid_type.empty:
+                fig_class = px.pie(
+                    valid_type, 
+                    names="type", 
+                    title="Distribution des Classes Thérapeutiques",
+                    template='plotly_white'
+                )
+                st.plotly_chart(fig_class, use_container_width=True)
 
-    # Agrégation des données : compte et agrégation des DCI
-    counts = df.groupby(column).agg(
-        Count=('DCI', 'size'),
-        # Agrège les DCI uniques et les sépare par un saut de ligne HTML
-        DCI_List=('DCI', lambda x: '<br>' + '<br>'.join(x.unique()))
-    ).reset_index()
+        # --- 2. Analyse des Prix (Relation Numérique/Catégorielle) ---
+        valid_prices = df[pd.to_numeric(df["Prix_num"], errors="coerce").notna()].copy()
+        valid_prices["Prix_num"] = valid_prices["Prix_num"].astype(float)
 
-    # Définition du titre
-    title = f"Distribution par {column}"
+        if not valid_prices.empty:
+            st.markdown("---")
+            st.subheader("Analyse des Prix")
 
-    # Configuration du modèle de survol (hovertemplate)
-    hover_text_pie = "<b>%{label}</b><br>Molécules : %{value}<br>Liste des DCI : %{customdata[0]}<extra></extra>"
+            # 2.1. Top 10 Existing Bar Chart
+            top10 = valid_prices.nlargest(10, "Prix_num")
+            fig_top10 = px.bar(top10, x="name", y="Prix_num", 
+                                title="Top 10 des Médicaments les Plus Chers",
+                                template='plotly_white')
+            st.plotly_chart(fig_top10, use_container_width=True)
 
-    if chart_type == 'pie':
-        # Graphique en camembert
-        fig = px.pie(
-            counts,
-            values='Count',
-            names=column,
-            title=title,
-            color=column,
-            color_discrete_sequence=px.colors.qualitative.Pastel,
-            hole=.3,
-            custom_data=['DCI_List'] # Ajout de la liste des DCI comme donnée personnalisée
-        )
-        # Utilisation de 'auto' pour la position et 'percent' pour l'info pour maximiser la lisibilité
-        fig.update_traces(textposition='auto', textinfo='percent',
-                          hovertemplate=hover_text_pie)
-
-        # Ajout de la configuration de la légende pour éviter l'overflow
-        fig.update_layout(
-            uniformtext_minsize=12, uniformtext_mode='hide', showlegend=True,
-            legend=dict(
-                orientation="h",  # Légende horizontale
-                yanchor="bottom",
-                y=-0.15,          # Position légèrement sous le graphique
-                xanchor="center",
-                x=0.5
-            )
-        )
-
-    else: # Bar chart
-        # Configuration du modèle de survol pour les barres
-        bar_hover_text = "<b>%{x}</b><br>Molécules : %{y}<br>Liste des DCI : %{customdata[0]}<extra></extra>"
-
-        fig = px.bar(
-            counts,
-            x=column,
-            y='Count',
-            title=title,
-            color=column,
-            color_discrete_sequence=px.colors.qualitative.Dark24,
-            text='Count',
-            custom_data=['DCI_List'] # Ajout de la liste des DCI comme donnée personnalisée
-        )
-        fig.update_traces(texttemplate='%{text}', textposition='outside', hovertemplate=bar_hover_text)
-        fig.update_layout(xaxis={'categoryorder':'total descending'}, yaxis_title="Nombre de Molécules")
-
-    # Réduction de la hauteur globale pour un meilleur ajustement dans le grid-container
-    fig.update_layout(
-        title_font_size=20,
-        margin=dict(t=50, l=20, r=20, b=20),
-        height=500, # Hauteur ajustée
-        template='plotly_white'
-    )
-    return fig
-
-def create_all_charts(df):
-    """Génère tous les graphiques requis et retourne leur code HTML."""
-
-    charts_html = []
-
-    # 1. Classification (Type) - BAR CHART
-    classification_counts = df['Type de Classification'].value_counts()
-    top_n = 8
-    top_classifications = classification_counts.nlargest(top_n).index
-
-    df_class = df.copy()
-    # Regrouper les petites catégories pour la clarté
-    df_class['Classification Groupée'] = df_class['Type de Classification'].apply(
-        lambda x: x if x in top_classifications else 'Autres Classifications'
-    )
-
-    fig1 = create_count_chart(df_class, 'Classification Groupée', chart_type='bar')
-    fig1.update_layout(title="Distribution par Type de Classification (Top 8 et Autres)")
-    charts_html.append(plot(fig1, output_type='div', include_plotlyjs=False))
-
-    # 2. Forme - Bar Chart
-    fig2 = create_count_chart(df, 'Forme', chart_type='bar')
-    charts_html.append(plot(fig2, output_type='div', include_plotlyjs=False))
-
-    # 3. Indication - Bar Chart
-    fig3 = create_count_chart(df, 'Indication', chart_type='bar')
-    charts_html.append(plot(fig3, output_type='div', include_plotlyjs=False))
-
-    # 4. Laboratoire Fabricant - Bar Chart
-    # Regrouper les petits laboratoires pour la clarté
-    top_labs = df['Laboratoire Fabricant'].value_counts().nlargest(10).index
-    df_labs = df.copy()
-    df_labs['Laboratoire Fabricant Groupé'] = df_labs['Laboratoire Fabricant'].apply(
-        lambda x: x if x in top_labs else 'Autres Laboratoires'
-    )
-    fig4 = create_count_chart(df_labs, 'Laboratoire Fabricant Groupé', chart_type='bar')
-    fig4.update_layout(title="Distribution par Laboratoire Fabricant (Top 10 + Autres)")
-    charts_html.append(plot(fig4, output_type='div', include_plotlyjs=False))
-
-    # 5. Nomenclature - Pie Chart (Binaire)
-    fig5 = create_count_chart(df, 'Nomenclature', chart_type='pie')
-    charts_html.append(plot(fig5, output_type='div', include_plotlyjs=False))
-
-    return charts_html
-
-# --- 3. ASSEMBLAGE FINAL DE LA PAGE HTML ---
-
-def generate_final_html(charts_html_list, output_file):
-    """Crée le fichier HTML final en intégrant les graphiques et le style."""
-
-    # La librairie Plotly doit être incluse une seule fois (via CDN)
-    plotly_js_cdn = '<script src="https://cdn.plot.ly/plotly-2.30.0.min.js" charset="utf-8"></script>'
-
-    html_content = f"""
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rapport d'Analyse des Immunosuppresseurs - {datetime.now().strftime('%Y-%m-%d')}</title>
-    {plotly_js_cdn}
-    <style>
-        body {{
-            font-family: 'Arial', sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f4f7f6;
-            color: #333;
-        }}
-        .container {{
-            max-width: 1200px;
-            margin: 0 auto;
-            background-color: #fff;
-            padding: 30px;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-        }}
-        h1 {{
-            color: #007bff;
-            border-bottom: 3px solid #007bff;
-            padding-bottom: 10px;
-            margin-bottom: 30px;
-            font-size: 2em;
-        }}
-        h2 {{
-            color: #34495e;
-            margin-top: 40px;
-            font-size: 1.5em;
-        }}
-        .chart-box {{
-            background-color: #f9f9f9;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            padding: 15px;
-            margin-bottom: 25px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        }}
-        .grid-container {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
-            gap: 20px;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Synthèse des Données sur les Immunosuppresseurs (Forme Sèche)</h1>
-        <p>Analyse des molécules {datetime.now().strftime('%d/%m/%Y')}.</p>
-
-        <h2>Distribution Totale</h2>
-
-        <div class="grid-container">
-            <div class="chart-box">
-                <!-- Graphique Nomenclature (Pie Chart) -->
-                {charts_html_list[4]}
-            </div>
-            <div class="chart-box">
-                <!-- Graphique Type de Classification (Bar Chart) -->
-                {charts_html_list[0]}
-            </div>
-        </div>
-
-        <h2>Détail par Caractéristique</h2>
-
-        <div class="chart-box">
-            <!-- Graphique Indication (Bar Chart) -->
-            {charts_html_list[2]}
-        </div>
-
-        <div class="chart-box">
-            <!-- Graphique Forme (Bar Chart) -->
-            {charts_html_list[1]}
-        </div>
-
-        <div class="chart-box">
-            <!-- Graphique Laboratoire Fabricant (Bar Chart) -->
-            {charts_html_list[3]}
-        </div>
-
-        <p style="text-align: center; margin-top: 40px; font-size: 0.8em; color: #666;">Rapport généré par le script d'analyse des données.</p>
-    </div>
-</body>
-</html>
-    """
-
-    with open(output_file, 'w', encoding='utf-8') as f:
-        f.write(html_content)
-
-    print(f"\n✅ Fichier HTML interactif généré avec succès : {output_file}")
+            # 2.2. Price Distribution Histogram
+            fig_hist = px.histogram(valid_prices, x="Prix_num", nbins=20, 
+                                    title="Distribution des Prix",
+                                    template='plotly_white')
+            st.plotly_chart(fig_hist, use_container_width=True)
+            
+            # 2.3. NOUVEAU: Box Plot de Prix par Classe Thérapeutique
+            if "type" in valid_prices.columns:
+                valid_type_prices = valid_prices[valid_prices["type"].astype(str).str.strip() != ""]
+                
+                # Optionnel : Afficher seulement les 15 premières classes si le nombre est trop grand
+                top_types = valid_type_prices['type'].value_counts().nlargest(15).index.tolist()
+                filtered_prices = valid_type_prices[valid_type_prices['type'].isin(top_types)]
+                
+                if not filtered_prices.empty:
+                    fig_box = px.box(
+                        filtered_prices, 
+                        x="type", 
+                        y="Prix_num", 
+                        title="Distribution des Prix par Classe Thérapeutique (Top 15)",
+                        color="type",
+                        template='plotly_white'
+                    )
+                    fig_box.update_layout(xaxis_title="Classe Thérapeutique", yaxis_title="Prix (Numérique)", showlegend=False)
+                    st.plotly_chart(fig_box, use_container_width=True)
+        else:
+            st.info("No valid numeric price data to display.")
 
 
-# --- 4. EXÉCUTION PRINCIPALE ---
-if __name__ == "__main__":
-    try:
-        # 1. Charger et préparer les données
-        data_frame = load_and_prepare_data(FILE_NAME)
+    # OBSERVATIONS
+    elif menu == "🧾 Observations":
+        st.header("🩺 Commercial & Medical Observations")
+        db_path = get_db_path()
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_name TEXT,
+                type TEXT,
+                comment TEXT,
+                date TEXT DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        conn.commit()
+        df_products = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name", conn)
+        products = df_products["name"].tolist()
+        conn.close()
 
-        # 2. Créer les graphiques
-        all_charts_html = create_all_charts(data_frame)
+        with st.form("new_obs", clear_on_submit=True):
+            product = st.selectbox("Product", ["Type manually..."] + products)
+            obs_type = st.selectbox("Type", ["Commercial", "Medical", "Other"])
+            if product == "Type manually...":
+                product = st.text_input("Manual Product Name")
+            comment = st.text_area("💬 Observation")
+            submit = st.form_submit_button("💾 Save")
+            if submit:
+                conn = sqlite3.connect(db_path)
+                conn.execute(
+                    "INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
+                    (product, obs_type, comment)
+                )
+                conn.execute(
+                    "UPDATE drugs SET Observations = ? WHERE name = ?",
+                    (comment, product)
+                )
+                conn.commit()
+                conn.close()
+                st.success("✅ Observation saved and linked to product.")
+                load_data.clear()
+                st.rerun()
 
-        # 3. Générer le rapport HTML
-        generate_final_html(all_charts_html, OUTPUT_HTML_FILE)
+        st.markdown("---")
+        conn = sqlite3.connect(db_path)
+        df_obs = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
+        conn.close()
 
-        # 4. Afficher un message de confirmation
-        print("\n--- ÉTAPES SUIVANTES ---")
-        print(f"Le fichier de rapport HTML '{OUTPUT_HTML_FILE}' est prêt.")
-        print("Téléchargez ce fichier et ouvrez-le dans votre navigateur pour visualiser les graphiques interactifs.")
+        if df_obs.empty:
+            st.info("No observations yet.")
+        else:
+            page_size = 10
+            total_pages = max(1, (len(df_obs) - 1) // page_size + 1)
+            page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
+            start = (page - 1) * page_size
+            end = start + page_size
+            page_df = df_obs.iloc[start:end]
 
-    except FileNotFoundError:
-        print(f"\nERREUR: Le fichier '{FILE_NAME}' n'a pas été trouvé.")
-        print(f"Veuillez vous assurer que le fichier Excel est présent dans le même répertoire.")
-    except Exception as e:
-        if 'data_frame' in locals():
-            print(f"\nSuggestion : Vérifiez le nom exact des colonnes. Colonnes trouvées : {data_frame.columns.tolist()}")
-        print(f"\nUne erreur inattendue s'est produite : {e}")
+            for _, row in page_df.iterrows():
+                with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
+                    st.write(row["comment"])
