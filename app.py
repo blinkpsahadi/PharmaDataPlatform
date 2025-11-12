@@ -83,23 +83,6 @@ if "username" not in st.session_state:
 
 if "credentials" in st.secrets:
     USERS = dict(st.secrets["credentials"])
-
-if not st.session_state.authenticated:
-    with st.form("login_form"):
-        st.markdown("## 🔒 Connection")
-        user = st.text_input("Username")
-        pwd = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
-        if submitted:
-            if check_password(user, pwd):
-                st.session_state.authenticated = True
-                st.session_state.username = user
-                st.success(f"Welcome {user} 👋")
-                st.rerun()
-            else:
-                st.error("Incorrect Password or Username")
-    st.stop()
-
 # ---------------------------
 # DB HELPERS & INITIALIZATION
 # ---------------------------
@@ -653,3 +636,4 @@ with main_col:
                 date_display = row['date'][:19].replace('-', '/').replace(' ', ' - ')
                 with st.expander(f"{row['product_name']} ({row['type']}) - **{date_display}**"):
                     st.write(row["comment"])
+
