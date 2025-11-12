@@ -180,211 +180,227 @@ with main_col:
                 else:
                     st.write("_No observation recorded for this product._")
 
-    # DASHBOARD
-    elif menu == "📊 Dashboard":
-        st.header("📊 Global Analysis")
-        df = load_data()
-        
-        # Helper pour extraire le prix numérique
-        def safe_extract(val):
-            try:
-                # Extrait le premier nombre flottant (supporte les virgules comme séparateur décimal)
-                match = re.search(r"[\d]+[.,]?[\d]*", str(val))
-                return float(match.group().replace(",", ".")) if match else None
-            except Exception:
-                return None
-                
-        import streamlit as st
-        import pandas as pd
-        import plotly.express as px
-        from datetime import date
-        
-        # Configuration de la page Streamlit pour imiter le style général
-        st.set_page_config(layout="wide", page_title="Rapport Immunosuppresseurs")
-        
-        # --- Fonctions de simulation de données (à remplacer par vos données réelles) ---
-        
-        def load_data():
-            """Charge ou simule les données de l'analyse."""
+# DASHBOARD
+elif menu == "📊 Dashboard":
+    st.header("📊 Global Analysis")
+    # df = load_data() # (Non nécessaire si load_data est juste au-dessus)
+    
+    # Helper pour extraire le prix numérique
+    def safe_extract(val):
+        try:
+            # Extrait le premier nombre flottant (supporte les virgules comme séparateur décimal)
+            match = re.search(r"[\d]+[.,]?[\d]*", str(val))
+            return float(match.group().replace(",", ".")) if match else None
+        except Exception:
+            return None
             
-            # Remplacement temporaire des données du fichier CSV/Excel par un DataFrame simulé
-            # Vos données réelles devront être chargées ici.
-            
-            # 1. Données de nomenclature (Présent vs Hors nomenclature)
-            data_nomenclature = {
-                'Statut': ['Présent', 'Hors nomenclature'],
-                'Nombre de Molécules': [56, 27],
-                'Liste DCI': [
-                    "Imatinib, Dasatinib, Nilotinib, Bosutinib, Ponatinib, Gefitinib, Erlotinib, Afatinib, Osimertinib, Neratinib, Ibrutinib, Acalabrutinib, Zanubrutinib, Sunitinib, Sorafenib, Pazopanib, Regorafenib, Cabozantinib, Lenvatinib, Gilteritinib, Axitinib, Vaclosporin, Tacrolimus, Tofacitinib, Sirolimus, Everolimus, Léflunomide, Azathioprine, Diméthyle fumarate",
-                    "Pimecrolimus, Asciminib, Dacomitinib, Crizotinib, Ceritinib, Alectinib, Brigatinib, Lorlatinib, Tucatinib, Acalabrutinib, Zanubrutinib, Vandetanib, Midostaurine, Larotrectinib, Entrectinib, Capmatinib, Tepotinib, Selpercatinib, Pralsetinib, Mycophenolic acid, Sirolimus, Tériflunomide, Pirfenidone, Diméthyle fumarate"
-                ]
-            }
-            df_nomenclature = pd.DataFrame(data_nomenclature)
-            
-            # 2. Données de classification groupée (Type de Classification)
-            data_classification = {
-                'Classification Groupée': ['Protein kinase inhibitors', 'Alkylating agents', 'Autres'],
-                'Nombre de Molécules': [51, 31, 1] # 1 pour 'nan'
-            }
-            df_classification = pd.DataFrame(data_classification)
-            
-            # 3. Données d'indication
-            data_indication = {
-                'Indication': ['Oncologie', 'Immunosupresseur', 'Cytostatiques', 'Immunosupresseurs'],
-                'Nombre de Molécules': [63, 8, 7, 5]
-            }
-            df_indication = pd.DataFrame(data_indication)
-            
-            return df_nomenclature, df_classification, df_indication
+    import streamlit as st
+    import pandas as pd
+    import plotly.express as px
+    from datetime import date
+    import re # Importation manquante dans l'extrait original
+    
+    # Configuration de la page Streamlit pour imiter le style général
+    st.set_page_config(layout="wide", page_title="Rapport Immunosuppresseurs")
+    
+    # --- Fonctions de simulation de données (à remplacer par vos données réelles) ---
+    
+    def load_data():
+        """Charge ou simule les données de l'analyse."""
         
-        # --- Fonctions de création de graphiques Plotly ---
+        # Remplacement temporaire des données du fichier CSV/Excel par un DataFrame simulé
+        # Vos données réelles devront être chargées ici.
         
-        def create_pie_chart(df, title):
-            """Crée un diagramme circulaire (Pie Chart) Plotly Express."""
-            fig = px.pie(
-                df,
-                names='Statut',
-                values='Nombre de Molécules',
-                title=f'<span style="font-size:1.1em; color:#34495e;">{title}</span>',
-                hole=0.3,
-                color_discrete_sequence=px.colors.qualitative.Pastel
+        # 1. Données de nomenclature (Présent vs Hors nomenclature)
+        data_nomenclature = {
+            'Statut': ['Présent', 'Hors nomenclature'],
+            'Nombre de Molécules': [56, 27],
+            'Liste DCI': [
+                "Imatinib, Dasatinib, Nilotinib, Bosutinib, Ponatinib, Gefitinib, Erlotinib, Afatinib, Osimertinib, Neratinib, Ibrutinib, Acalabrutinib, Zanubrutinib, Sunitinib, Sorafenib, Pazopanib, Regorafenib, Cabozantinib, Lenvatinib, Gilteritinib, Axitinib, Vaclosporin, Tacrolimus, Tofacitinib, Sirolimus, Everolimus, Léflunomide, Azathioprine, Diméthyle fumarate",
+                "Pimecrolimus, Asciminib, Dacomitinib, Crizotinib, Ceritinib, Alectinib, Brigatinib, Lorlatinib, Tucatinib, Acalabrutinib, Zanubrutinib, Vandetanib, Midostaurine, Larotrectinib, Entrectinib, Capmatinib, Tepotinib, Selpercatinib, Pralsetinib, Mycophenolic acid, Sirolimus, Tériflunomide, Pirfenidone, Diméthyle fumarate"
+            ]
+        }
+        df_nomenclature = pd.DataFrame(data_nomenclature)
+        
+        # 2. Données de classification groupée (Type de Classification)
+        data_classification = {
+            'Classification Groupée': ['Protein kinase inhibitors', 'Alkylating agents', 'Autres'],
+            'Nombre de Molécules': [51, 31, 1] # 1 pour 'nan'
+        }
+        df_classification = pd.DataFrame(data_classification)
+        
+        # 3. Données d'indication
+        data_indication = {
+            'Indication': ['Oncologie', 'Immunosupresseur', 'Cytostatiques', 'Immunosupresseurs'],
+            'Nombre de Molécules': [63, 8, 7, 5]
+        }
+        df_indication = pd.DataFrame(data_indication)
+
+        # 4. Données de forme galénique (NOUVEAU - Basé sur la colonne 'Forme')
+        data_forme = {
+            'Forme Galénique': ['Comprimé', 'Gélule', 'Comprimé pelliculé', 'Crème'],
+            'Nombre de Molécules': [45, 20, 15, 3] # Exemples basés sur les données du fichier
+        }
+        df_forme = pd.DataFrame(data_forme)
+        
+        return df_nomenclature, df_classification, df_indication, df_forme # Retourne df_forme
+    
+    # --- Fonctions de création de graphiques Plotly ---
+    
+    def create_pie_chart(df, names_col, values_col, title):
+        """Crée un diagramme circulaire (Pie Chart) Plotly Express."""
+        fig = px.pie(
+            df,
+            names=names_col,
+            values=values_col,
+            title=f'<span style="font-size:1.1em; color:#34495e;">{title}</span>',
+            hole=0.3,
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        
+        # Amélioration du layout pour le style dashboard
+        fig.update_layout(
+            showlegend=True,
+            margin=dict(l=20, r=20, t=50, b=20),
+            font=dict(family="Arial, sans-serif"),
+            plot_bgcolor='#f9f9f9',
+            paper_bgcolor='#f9f9f9',
+            height=400 # Fixer la hauteur pour l'alignement dans la grille
+        )
+        fig.update_traces(
+            textinfo='percent+label', 
+            marker=dict(line=dict(color='#FFFFFF', width=1))
+        )
+        return fig
+    
+    def create_bar_chart(df, x_col, y_col, color_col, title, y_title="Nombre de Molécules"):
+        """Crée un diagramme à barres Plotly Express."""
+        fig = px.bar(
+            df,
+            x=x_col,
+            y=y_col,
+            color=color_col,
+            title=f'<span style="font-size:1.1em; color:#34495e;">{title}</span>',
+            text_auto=True, # Afficher les valeurs sur les barres
+            color_discrete_sequence=px.colors.qualitative.Vivid
+        )
+        
+        # Amélioration du layout
+        fig.update_layout(
+            xaxis_title=x_col,
+            yaxis_title=y_title,
+            showlegend=False,
+            margin=dict(l=20, r=20, t=50, b=20),
+            font=dict(family="Arial, sans-serif"),
+            plot_bgcolor='#f9f9f9',
+            paper_bgcolor='#f9f9f9',
+            height=400 # Fixer la hauteur pour l'alignement
+        )
+        fig.update_traces(
+            textfont_color='black'
+        )
+        
+        return fig
+    
+    # --- Styles CSS personnalisés pour imiter le HTML ---
+    
+    st.markdown("""
+    <style>
+        /* Style général du conteneur (similaire à .container) */
+        .stApp {
+            background-color: #f4f7f6;
+        }
+        
+        /* Titre principal (similaire à h1) */
+        h1 {
+            color: #007bff;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }
+    
+        /* Sous-titres (similaire à h2) */
+        h2 {
+            color: #34495e;
+            margin-top: 40px;
+            font-size: 1.5em;
+        }
+        
+        /* Conteneur de graphique (similaire à .chart-box) */
+        .stContainer {
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            padding: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            margin-bottom: 25px; /* Espace entre les chart-box dans la grille */
+        }
+        
+        /* Enlever les marges par défaut des colonnes pour mieux contrôler le padding */
+        .css-1r6r062 {
+            padding: 0 !important;
+        }
+        
+    </style>
+    """, unsafe_allow_html=True)
+    
+    
+    # --- Section Tableau de Bord ---
+    
+    # Charger les données simulées (Mise à jour pour recevoir df_forme)
+    df_nom, df_class, df_ind, df_forme = load_data()
+    
+    # Titre du rapport
+    st.markdown("<h1>Synthèse des Données sur les Immunosuppresseurs (Forme Sèche)</h1>", unsafe_allow_html=True)
+    st.write(f"Analyse des molécules {date.today().strftime('%d/%m/%Y')}.")
+    
+    
+    # ----------------------------------------------------
+    # Section 1: Distribution Totale (Grid 2 colonnes)
+    # ----------------------------------------------------
+    
+    st.markdown("<h2>Distribution par Molécule et Caractéristique</h2>", unsafe_allow_html=True)
+    
+    # Création de la grille (grid-container)
+    col1, col2 = st.columns(2)
+    
+    # Graphique 1: Distribution par Nomenclature (Pie Chart)
+    with col1:
+        with st.container(): # Imite le chart-box
+            fig_nom = create_pie_chart(
+                df_nom, 
+                names_col='Statut',
+                values_col='Nombre de Molécules',
+                title="Distribution par Nomenclature"
             )
-            
-            # Amélioration du layout pour le style dashboard
-            fig.update_layout(
-                showlegend=True,
-                margin=dict(l=20, r=20, t=50, b=20),
-                font=dict(family="Arial, sans-serif"),
-                plot_bgcolor='#f9f9f9',
-                paper_bgcolor='#f9f9f9'
+            st.plotly_chart(fig_nom, use_container_width=True)
+    
+    
+    # Graphique 2: Distribution par Type de Classification (Bar Chart)
+    with col2:
+        with st.container(): # Imite le chart-box
+            fig_class = create_bar_chart(
+                df_class, 
+                x_col='Classification Groupée', 
+                y_col='Nombre de Molécules', 
+                color_col='Classification Groupée', 
+                title="Distribution par Type de Classification (Top 3)"
             )
-            fig.update_traces(
-                textinfo='percent+label', 
-                marker=dict(line=dict(color='#FFFFFF', width=1))
-            )
-            return fig
-        
-        def create_bar_chart(df, x_col, y_col, color_col, title, y_title="Nombre de Molécules"):
-            """Crée un diagramme à barres Plotly Express."""
-            fig = px.bar(
-                df,
-                x=x_col,
-                y=y_col,
-                color=color_col,
-                title=f'<span style="font-size:1.1em; color:#34495e;">{title}</span>',
-                text_auto=True, # Afficher les valeurs sur les barres
-                color_discrete_sequence=px.colors.qualitative.Vivid
-            )
-            
-            # Amélioration du layout
-            fig.update_layout(
-                xaxis_title=x_col,
-                yaxis_title=y_title,
-                showlegend=False,
-                margin=dict(l=20, r=20, t=50, b=20),
-                font=dict(family="Arial, sans-serif"),
-                plot_bgcolor='#f9f9f9',
-                paper_bgcolor='#f9f9f9'
-            )
-            fig.update_traces(
-                textfont_color='black'
-            )
-            
-            return fig
-        
-        # --- Styles CSS personnalisés pour imiter le HTML ---
-        
-        st.markdown("""
-        <style>
-            /* Style général du conteneur (similaire à .container) */
-            .stApp {
-                background-color: #f4f7f6;
-            }
-            
-            /* Titre principal (similaire à h1) */
-            h1 {
-                color: #007bff;
-                border-bottom: 3px solid #007bff;
-                padding-bottom: 10px;
-                margin-bottom: 30px;
-                font-size: 2em;
-            }
-        
-            /* Sous-titres (similaire à h2) */
-            h2 {
-                color: #34495e;
-                margin-top: 40px;
-                font-size: 1.5em;
-            }
-            
-            /* Conteneur de graphique (similaire à .chart-box) */
-            .stContainer {
-                background-color: #f9f9f9;
-                border: 1px solid #ddd;
-                border-radius: 12px;
-                padding: 15px;
-                box-shadow: 0 4px 10px rgba(0,0,0,0.05);
-                margin-bottom: 25px; /* Espace entre les chart-box dans la grille */
-            }
-            
-            /* Enlever les marges par défaut des colonnes pour mieux contrôler le padding */
-            .css-1r6r062 {
-                padding: 0 !important;
-            }
-            
-        </style>
-        """, unsafe_allow_html=True)
-        
-        
-        # --- Section Tableau de Bord ---
-        
-        # Charger les données simulées
-        df_nom, df_class, df_ind = load_data()
-        
-        # Titre du rapport
-        st.markdown("<h1>Synthèse des Données sur les Immunosuppresseurs (Forme Sèche)</h1>", unsafe_allow_html=True)
-        st.write(f"Analyse des molécules {date.today().strftime('%d/%m/%Y')}.")
-        
-        
-        # ----------------------------------------------------
-        # Section 1: Distribution Totale (Grid 2 colonnes)
-        # ----------------------------------------------------
-        
-        st.markdown("<h2>Distribution Totale</h2>", unsafe_allow_html=True)
-        
-        # Création de la grille (grid-container)
-        col1, col2 = st.columns(2)
-        
-        # Graphique 1: Distribution par Nomenclature (Pie Chart)
-        with col1:
-            with st.container(): # Imite le chart-box
-                fig_nom = create_pie_chart(
-                    df_nom, 
-                    "Distribution par Nomenclature"
-                )
-                st.plotly_chart(fig_nom, use_container_width=True)
-        
-        
-        # Graphique 2: Distribution par Type de Classification (Bar Chart)
-        with col2:
-            with st.container(): # Imite le chart-box
-                fig_class = create_bar_chart(
-                    df_class, 
-                    x_col='Classification Groupée', 
-                    y_col='Nombre de Molécules', 
-                    color_col='Classification Groupée', 
-                    title="Distribution par Type de Classification (Top 3)"
-                )
-                st.plotly_chart(fig_class, use_container_width=True)
-        
-        
-        # ----------------------------------------------------
-        # Section 2: Détail par Caractéristique (1 colonne pleine)
-        # ----------------------------------------------------
-        
-        st.markdown("<h2>Détail par Caractéristique</h2>", unsafe_allow_html=True)
-        
-        # Conteneur pour le graphique d'Indication (s'étend sur toute la largeur)
+            st.plotly_chart(fig_class, use_container_width=True)
+    
+    
+    # ----------------------------------------------------
+    # Section 2: Détail par Caractéristique (Grille 2 colonnes)
+    # AJOUT du graphique de la forme galénique
+    # ----------------------------------------------------
+    
+    st.markdown("<h2>Détail par Indication et Forme Galénique</h2>", unsafe_allow_html=True)
+    
+    col3, col4 = st.columns(2)
+
+    # Graphique 3: Distribution par Indication
+    with col3:
         with st.container(): # Imite le chart-box
             fig_ind = create_bar_chart(
                 df_ind, 
@@ -394,9 +410,20 @@ with main_col:
                 title="Distribution par Indication"
             )
             st.plotly_chart(fig_ind, use_container_width=True)
+    
+    # Graphique 4: Distribution par Forme Galénique (NOUVEAU)
+    with col4:
+        with st.container(): # Imite le chart-box
+            fig_forme = create_bar_chart(
+                df_forme, 
+                x_col='Forme Galénique', 
+                y_col='Nombre de Molécules', 
+                color_col='Forme Galénique', 
+                title="Distribution par Forme Galénique"
+            )
+            st.plotly_chart(fig_forme, use_container_width=True)
             
-        st.write("---")
-
+    st.write("---")
     # OBSERVATIONS
     elif menu == "🧾 Observations":
         st.header("🩺 Commercial & Medical Observations")
@@ -457,4 +484,5 @@ with main_col:
             for _, row in page_df.iterrows():
                 with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
                     st.write(row["comment"])
+
 
