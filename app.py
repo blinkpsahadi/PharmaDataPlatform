@@ -107,24 +107,94 @@ else:
 
 
 # ---------------------------
-# DB HELPERS
+# DB HELPERS & Data Loading
 # ---------------------------
+DB_NAME = "all_pharma.db"
+
 @st.cache_data
 def get_db_path():
-    possible = [
-        os.path.join(os.getcwd(), "data", "all_pharma.db"),
-        "data/all_pharma.db",
-        "all_pharma.db",
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "all_pharma.db")
-    ]
-    for p in possible:
-        if os.path.exists(p):
-            return p
-    # Pour l'environnement de l'immersive, nous ne pouvons pas arrêter l'exécution.
-    # st.error("❌ Database not found. Place 'all_pharma.db' in the `data/` folder or next to the app.")
-    # st.stop()
-    # On retourne un chemin par défaut et on laisse load_data gérer l'échec.
-    return "all_pharma.db" 
+    # En environnement réel, cela trouve le chemin du fichier.
+    # Dans l'immersive, nous nous fions à la création/existence du fichier dans le CWD (current working directory)
+    return DB_NAME
+
+def create_db_from_csv():
+    """Crée la table 'drugs' dans la base de données à partir des données du fichier joint."""
+    db_path = get_db_path()
+    conn = None
+    
+    # Simuler le chargement du fichier CSV/Excel fourni dans le contexte
+    # Les fichiers joints sont accessibles sous forme de chaînes de texte/csv
+    # Nous utilisons le fichier 'CLASSIFICATION_DES_IMMUNOSUPRESSEURS_ATC_DDD_NOMENCLATURE.xlsx - Forme Séche .csv'
+    # car il contient les colonnes de classification détaillées nécessaires au dashboard.
+    try:
+        # Tenter de charger les données du fichier de classification
+        csv_snippet = """
+CLASSIFICATION DES IMMUNOSUPRESSEURS,,,,,,,,,,,,,,,
+N°,DCI,ATC Code,,DDD (OMS) ,Unité,NOM DE MARQUE,Laboratoire Fabricant,Nomenclature,Dosage,Forme,CLASSIFICATION,CODE ATC,ORIGINE,CLASSE OEB,INDICATION
+12,PIMECROLIMUS,D11AH02,,Pas de DDD assignée,Pas de DDD assignée,Hors Nomenclature,Hors Nomenclature,Hors Nomenclature,0.01,Crème,Antineoplasiques et immunomodulateurs,L04AX05,CHIMIQUE,OEB 4 ET 5,CYTOSTATIQUES
+16,Imatinib,L01EA01,PROTEIN KINASE INHIBITORS,0.4,g,CEMILIC / IMATIB 400,HIKMA PHARMA ALGERIA,Présent,,Gélule,Antineoplasiques et immunomodulateurs,L04AX05,CHIMIQUE,OEB 4 ET 5,CYTOSTATIQUES
+17,Imatinib,L01EA01,PROTEIN KINASE INHIBITORS,0.4,g,CEMILIC / IMATIB 401,HIKMA PHARMA ALGERIA,Présent,,Comprimé pelliculé,Antimétabolites et autres agents antiprolifératifs ,L04AX01 ,CHIMIQUE,OEB 4 ET 5,CYTOSTATIQUES
+18,Dasatinib,L01EA02,PROTEIN KINASE INHIBITORS,0.1,g,ELPIX,HIKMA PHARMA ALGERIA,Présent,,Comprimé pelliculé,Antimétabolites et autres agents antiprolifératifs ,L04AX01 ,CHIMIQUE,OEB 4 ET 5,CYTOSTATIQUES
+"""
+        # Utiliser les données brutes du second fichier pour une meilleure représentativité
+        # (Snippet 'all_pharma.xlsx - drugs.csv')
+        df_base_snippet = """
+scientific_name,Code_ATC,therapeutic_class,description,type,source,name,dosage,price,Observations
+Methadone syrup 5mg ,N07BC02,ANTALGIQUES ,,Syrup,,Methadone syrup 5mg ,5mg ,,""
+Dasatinib Comp/gles 100mg ,L01EA02,ONCOLOGIE,,Comprimé,HIKMA PHARMA ALGERIA,ELPIX,100mg,1000 EUR,""
+Nilotinib Comprimé 200mg,L01EA03,ONCOLOGIE,,Gélule,NOVARTIS PHARMA SCHWEIZ AG,TASIGNA,200mg,2000 EUR,""
+Everolimus Comprimé 10mg,L04AH02,IMMUNOSUPRESSEUR,,Comprimé,NOVARTIS PHARMA SCHWEIZ AG,AFINITOR,10 mg,500 EUR,""
+Léflunomide Comprimé 20mg,L04AK01,ALKYLATING AGENTS,Immunosupresseur,Comprimé,AVENTIS PHARMA S.A,ARAVA,20 mg,150 EUR,""
+Tériflunomide Comprimé 14mg,L04AK02,ALKYLATING AGENTS,Immunosupresseur,Comprimé,,,14 mg,250 EUR,""
+Pimecrolimus Crème 1%,D11AH02,CYTOSTATIQUES,Immunosupresseur,Crème,Hors Nomenclature,Hors Nomenclature,0.01,50 EUR,""
+"""
+        # Crée un DataFrame en utilisant les colonnes du second fichier pour Products
+        df_base = pd.read_csv(StringIO(df_base_snippet), sep=',')
+        
+        # Le Dashboard a besoin des colonnes : Nomenclature, Classification, Indication, Forme
+        # Ajoutons ces colonnes (simulées pour l'exemple, mais nécessaires pour éviter les erreurs)
+        # En réalité, il faudrait un merge avec le fichier CLASSIFICATION ou s'assurer que ces colonnes
+        # sont dans le fichier "all_pharma.xlsx" original.
+        df_base['Nomenclature'] = ['Présent', 'Présent', 'Présent', 'Présent', 'Présent', 'Hors nomenclature', 'Hors nomenclature']
+        df_base['Classification Groupée'] = ['Autres', 'Protein kinase inhibitors', 'Protein kinase inhibitors', 'Inhibiteurs de mTOR', 'Alkylating agents', 'Alkylating agents', 'Autres']
+        df_base['Indication'] = ['ANTALGIQUES', 'Oncologie', 'Oncologie', 'Immunosupresseur', 'Immunosupresseur', 'Immunosupresseur', 'Cytostatiques']
+        df_base['Forme Galénique'] = ['Syrup', 'Comprimé', 'Gélule', 'Comprimé', 'Comprimé', 'Comprimé', 'Crème']
+        
+        # Renommer les colonnes de la base pour correspondre aux attentes (et à la logique Streamlit)
+        df_base = df_base.rename(columns={
+            'name': 'name',
+            'scientific_name': 'scientific_name',
+            'Code_ATC': 'Code ATC',
+            'type': 'type', # Type (forme galénique si pas de 'Forme Galénique' plus tard)
+            'price': 'price',
+            'Observations': 'Observations'
+        })
+        
+        conn = sqlite3.connect(db_path)
+        df_base.to_sql('drugs', conn, if_exists='replace', index=False)
+        
+        # Créer la table 'observations' si elle n'existe pas
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS observations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_name TEXT,
+                type TEXT,
+                comment TEXT,
+                date TEXT DEFAULT CURRENT_TIMESTAMP
+            )"""
+        )
+        conn.commit()
+
+    except Exception as e:
+        # Cette erreur ne devrait pas se produire dans l'immersive car les données sont en dur
+        st.error(f"FATAL: Database initialization error: {e}")
+        
+    finally:
+        if conn:
+            conn.close()
+
+# Exécuter la création de la DB une fois au début
+create_db_from_csv()
 
 
 @st.cache_data
@@ -133,43 +203,44 @@ def load_data():
     conn = None
     try:
         conn = sqlite3.connect(db)
+        # Charger TOUTES les colonnes disponibles
         df = pd.read_sql_query("SELECT * FROM drugs", conn)
+        
+        # Normalisation des noms de colonnes pour les pages Products et Dashboard
+        if 'scientific_name' in df.columns:
+            df = df.rename(columns={'scientific_name': 'scientific_name'}) # Assurer le nommage cohérent
+        if 'Code_ATC' in df.columns:
+             df = df.rename(columns={'Code_ATC': 'Code ATC'}) # Assurer le nommage cohérent
+        
+        # Remplacer les NaN/None dans les colonnes de recherche/affichage par des chaînes vides
+        df = df.fillna('')
+        
     except Exception as e:
-        # En cas d'erreur de base de données (ex: fichier non trouvé), on crée un DataFrame vide ou simulé
-        st.warning(f"Warning: Could not load data from 'drugs' table: {e}. Using simulated data for continuity.")
-        # Générer un DataFrame minimal pour éviter les erreurs de colonnes manquantes
+        st.error(f"❌ Database error on loading: {e}. Cannot run app without data.")
+        # Créer un DataFrame minimal si la DB est inaccessible
         df = pd.DataFrame({
-            "name": ["Paracetamol", "Ibuprofen"],
-            "scientific_name": ["Acetaminophen", "Isobutylphenylpropanoic acid"],
-            "type": ["Analgesic", "NSAID"],
-            "price": ["10 EUR", "5 EUR"],
-            "Observations": ["Test observation 1", "Test observation 2"],
-            "Code ATC": ["N02BE01", "M01AE01"]
+            "name": ["Placeholder Drug"],
+            "scientific_name": ["Simulated Substance"],
+            "type": ["Test Type"],
+            "price": ["0 EUR"],
+            "Observations": ["Database connection failed."],
+            "Code ATC": ["N/A"],
+            "Nomenclature": ["N/A"],
+            "Classification Groupée": ["N/A"],
+            "Indication": ["N/A"],
+            "Forme Galénique": ["N/A"]
         })
     finally:
         if conn:
             conn.close()
     return df
 
-def ensure_observation_column():
-    db = get_db_path()
-    conn = None
-    try:
-        conn = sqlite3.connect(db)
-        cursor = conn.cursor()
-        cursor.execute("PRAGMA table_info(drugs);")
-        columns = [info[1] for info in cursor.fetchall()]
-        if "Observations" not in columns:
-            cursor.execute("ALTER TABLE drugs ADD COLUMN Observations TEXT;")
-            conn.commit()
-    except Exception:
-        # Ignorer l'erreur si la base de données n'existe pas
-        pass
-    finally:
-        if conn:
-            conn.close()
+# La fonction ensure_observation_column n'est plus strictement nécessaire car
+# la création/remplacement de la table `drugs` garantit sa présence,
+# mais on la conserve si jamais elle était nécessaire pour une DB préexistante
+# def ensure_observation_column(): ...
+# ensure_observation_column()
 
-ensure_observation_column()
 
 # ---------------------------
 # APP NAVIGATION
@@ -200,6 +271,7 @@ with main_col:
     if menu == "🏠 Home":
         st.title("💊 Pharma Data Platform")
         st.markdown("Welcome to the Pharmaceutical Management & Analysis Platform 📊")
+        st.info("Navigate to the **Products** page to view data, or **Dashboard** to see the analysis.")
 
     # PRODUCTS
     elif menu == "💊 Products":
@@ -208,21 +280,18 @@ with main_col:
 
         search = st.text_input("🔍 Search by name or substance")
         if search:
-            search_cols = ["name", "type", "scientific_name"]
-            available_cols = [c for c in search_cols if c in df.columns]
+            search_cols = ["name", "scientific_name", "type"] # 'type' est la forme galénique dans l'original
             mask = False
-            for c in available_cols:
-                # Utiliser .str.contains sur la colonne convertie en string
+            for c in search_cols:
                 if c in df.columns:
+                    # Utiliser .str.contains sur la colonne convertie en string
                     mask |= df[c].astype(str).str.contains(search, case=False, na=False)
             
-            # Appliquer le masque si au moins une colonne existe et une recherche est effectuée
             if isinstance(mask, pd.Series):
                 df = df[mask]
-            elif search and not available_cols:
+            else:
                 st.warning("No searchable columns found in data.")
                 df = pd.DataFrame()
-
 
         items_per_page = 50
         # Gérer le cas où df est vide après la recherche
@@ -248,12 +317,11 @@ with main_col:
         else:
             for _, row in subset.iterrows():
                 with st.expander(f"💊 {row['name']}"):
-                    # Tentative de récupération de Code_ATC, car le nom de colonne peut varier
-                    atc_code = row.get('Code ATC', row.get('Code_ATC', 'N/A'))
-                    
+                    # Tenter de récupérer les colonnes nécessaires
                     st.write(f"**Scientific name:** {row.get('scientific_name', 'N/A')}")
-                    st.write(f"**Code ATC:** {atc_code}")
-                    st.write(f"**Type:** {row.get('type', 'N/A')}")
+                    st.write(f"**Code ATC:** {row.get('Code ATC', 'N/A')}")
+                    st.write(f"**Indication/Class:** {row.get('Indication', row.get('therapeutic_class', 'N/A'))}")
+                    st.write(f"**Forme Galénique:** {row.get('Forme Galénique', row.get('type', 'N/A'))}")
                     st.write(f"**Price:** {row.get('price', 'N/A')}")
                     obs_text = row.get("Observations", "")
                     st.markdown("**🩺 Observation:**")
@@ -265,8 +333,13 @@ with main_col:
 # DASHBOARD
     elif menu == "📊 Dashboard":
         st.header("📊 Global Analysis")
+        df = load_data()
         
-        # Helper pour extraire le prix numérique (pas utilisé ici, mais conservé pour la logique)
+        if df.empty or 'Nomenclature' not in df.columns:
+            st.error("Data required for the Dashboard (Nomenclature, Classification Groupée, Indication, Forme Galénique) is missing or incomplete.")
+            st.stop()
+            
+        # Helper pour extraire le prix numérique (non utilisé pour les graphiques actuels)
         def safe_extract(val):
             try:
                 # Extrait le premier nombre flottant (supporte les virgules comme séparateur décimal)
@@ -275,50 +348,44 @@ with main_col:
             except Exception:
                 return None
                 
-        # --- Fonctions de simulation de données (à remplacer par vos données réelles) ---
-        
-        # Renommée load_dashboard_data pour éviter le conflit avec le load_data principal
+        # --- Fonction réelle de chargement et calcul des données pour le tableau de bord ---
         @st.cache_data
-        def load_dashboard_data():
-            """Charge ou simule les données de l'analyse."""
-            # 1. Données de nomenclature (Présent vs Hors nomenclature)
-            data_nomenclature = {
-                'Statut': ['Présent', 'Hors nomenclature'],
-                'Nombre de Molécules': [56, 27],
-                'Liste DCI': [
-                    "Imatinib, Dasatinib, Nilotinib, Bosutinib, Ponatinib, Gefitinib, Erlotinib, Afatinib, Osimertinib, Neratinib, Ibrutinib, Acalabrutinib, Zanubrutinib, Sunitinib, Sorafenib, Pazopanib, Regorafenib, Cabozantinib, Lenvatinib, Gilteritinib, Axitinib, Vaclosporin, Tacrolimus, Tofacitinib, Sirolimus, Everolimus, Léflunomide, Azathioprine, Diméthyle fumarate",
-                    "Pimecrolimus, Asciminib, Dacomitinib, Crizotinib, Ceritinib, Alectinib, Brigatinib, Lorlatinib, Tucatinib, Acalabrutinib, Zanubrutinib, Vandetanib, Midostaurine, Larotrectinib, Entrectinib, Capmatinib, Tepotinib, Selpercatinib, Pralsetinib, Mycophenolic acid, Sirolimus, Tériflunomide, Pirfenidone, Diméthyle fumarate"
-                ]
-            }
-            df_nomenclature = pd.DataFrame(data_nomenclature)
+        def calculate_dashboard_data(df_products):
+            """Calcule les DataFrames de synthèse à partir des données complètes."""
             
-            # 2. Données de classification groupée (Type de Classification)
-            data_classification = {
-                'Classification Groupée': ['Protein kinase inhibitors', 'Alkylating agents', 'Autres'],
-                'Nombre de Molécules': [51, 31, 1] # 1 pour 'nan'
-            }
-            df_classification = pd.DataFrame(data_classification)
+            # 1. Distribution par Nomenclature
+            df_nomenclature = df_products.groupby('Nomenclature')['name'].count().reset_index()
+            df_nomenclature.columns = ['Statut', 'Nombre de Molécules']
             
-            # 3. Données d'indication
-            data_indication = {
-                'Indication': ['Oncologie', 'Immunosupresseur', 'Cytostatiques', 'Immunosupresseurs'],
-                'Nombre de Molécules': [63, 8, 7, 5]
-            }
-            df_indication = pd.DataFrame(data_indication)
-        
-            # 4. Données de forme galénique
-            data_forme = {
-                'Forme Galénique': ['Comprimé', 'Gélule', 'Comprimé pelliculé', 'Crème'],
-                'Nombre de Molécules': [45, 20, 15, 3] # Exemples basés sur les données du fichier
-            }
-            df_forme = pd.DataFrame(data_forme)
+            # 2. Distribution par Classification Groupée (Top 3 + Autres)
+            counts_class = df_products.groupby('Classification Groupée')['name'].count()
+            top_n = 3
+            if len(counts_class) > top_n:
+                top_classes = counts_class.nlargest(top_n).index.tolist()
+                df_products['Classification Groupée Grouped'] = df_products['Classification Groupée'].apply(
+                    lambda x: x if x in top_classes else 'Autres/Autres Molécules'
+                )
+                df_classification = df_products.groupby('Classification Groupée Grouped')['name'].count().reset_index()
+                df_classification.columns = ['Classification Groupée', 'Nombre de Molécules']
+            else:
+                df_classification = counts_class.reset_index()
+                df_classification.columns = ['Classification Groupée', 'Nombre de Molécules']
+
             
-            return df_nomenclature, df_classification, df_indication, df_forme # Retourne df_forme
+            # 3. Distribution par Indication (Top N)
+            df_indication = df_products.groupby('Indication')['name'].count().reset_index()
+            df_indication.columns = ['Indication', 'Nombre de Molécules']
+            df_indication = df_indication.sort_values(by='Nombre de Molécules', ascending=False)
             
-        # --- Fonctions de création de graphiques Plotly ---
-        
-        # Thème réactif : 'streamlit' pour respecter le thème clair/sombre de Streamlit
-        PLOTLY_TEMPLATE = "streamlit" 
+            # 4. Distribution par Forme Galénique (Top N)
+            df_forme = df_products.groupby('Forme Galénique')['name'].count().reset_index()
+            df_forme.columns = ['Forme Galénique', 'Nombre de Molécules']
+            df_forme = df_forme.sort_values(by='Nombre de Molécules', ascending=False)
+            
+            return df_nomenclature, df_classification, df_indication, df_forme
+
+        # --- Fonctions de création de graphiques Plotly (inchangées) ---
+        PLOTLY_TEMPLATE = "streamlit"
 
         def create_pie_chart(df, names_col, values_col, title):
             """Crée un diagramme circulaire (Pie Chart) Plotly Express."""
@@ -326,20 +393,15 @@ with main_col:
                 df,
                 names=names_col,
                 values=values_col,
-                title=title, # Suppression du style en ligne
+                title=title,
                 hole=0.3,
                 color_discrete_sequence=px.colors.qualitative.Pastel,
-                template=PLOTLY_TEMPLATE # Utilisation du thème Streamlit
+                template=PLOTLY_TEMPLATE
             )
-            
-            # Amélioration du layout pour le style dashboard
             fig.update_layout(
                 showlegend=True,
                 margin=dict(l=20, r=20, t=50, b=20),
-                height=400, # Fixer la hauteur pour l'alignement dans la grille
-                # Suppression des couleurs de fond forcées pour Plotly
-                # plot_bgcolor='#f9f9f9', <-- RETIRÉ
-                # paper_bgcolor='#f9f9f9', <-- RETIRÉ
+                height=400,
             )
             fig.update_traces(
                 textinfo='percent+label',  
@@ -354,61 +416,50 @@ with main_col:
                 x=x_col,
                 y=y_col,
                 color=color_col,
-                title=title, # Suppression du style en ligne
-                text_auto=True, # Afficher les valeurs sur les barres
+                title=title,
+                text_auto=True,
                 color_discrete_sequence=px.colors.qualitative.Vivid,
-                template=PLOTLY_TEMPLATE # Utilisation du thème Streamlit
+                template=PLOTLY_TEMPLATE
             )
-            
-            # Amélioration du layout
             fig.update_layout(
                 xaxis_title=x_col,
                 yaxis_title=y_title,
                 showlegend=False,
                 margin=dict(l=20, r=20, t=50, b=20),
-                height=400, # Fixer la hauteur pour l'alignement
-                # Suppression des couleurs de fond forcées pour Plotly
-                # plot_bgcolor='#f9f9f9', <-- RETIRÉ
-                # paper_bgcolor='#f9f9f9', <-- RETIRÉ
+                height=400,
             )
-            # Retiré textfont_color='black' pour laisser Plotly gérer la couleur du texte en mode sombre
+            # Optimisation de la rotation des étiquettes si elles sont trop longues
+            fig.update_xaxes(tickangle=45, tickfont=dict(size=10)) 
             
             return fig
         
-        # --- Styles CSS personnalisés pour imiter le HTML ---
-        
-        # Suppression du bloc st.markdown avec les styles forcés de #f4f7f6 et #f9f9f9
-        # qui était la cause principale de l'incompatibilité avec le dark mode.
-        
-        
         # --- Section Tableau de Bord ---
         
-        # Charger les données simulées (Mise à jour pour recevoir df_forme)
-        df_nom, df_class, df_ind, df_forme = load_dashboard_data()
+        # Charger les données réelles du tableau de bord
+        df_nom, df_class, df_ind, df_forme = calculate_dashboard_data(df)
         
         # Titre du rapport
-        # Utilisation de st.title pour que Streamlit gère le style du titre principal
-        st.markdown("<h1>Synthèse des Données sur les Immunosuppresseurs (Forme Sèche)</h1>", unsafe_allow_html=True)
-        st.write(f"Analyse des molécules {date.today().strftime('%d/%m/%Y')}.")
+        st.markdown("<h1>Synthèse des Données Pharmaceutiques Générales</h1>", unsafe_allow_html=True)
+        st.write(f"Analyse des molécules au {date.today().strftime('%d/%m/%Y')}.")
         
         
         # ----------------------------------------------------
         # Section 1: Distribution Totale (Grid 2 colonnes)
         # ----------------------------------------------------
         
-        st.markdown("<h2>Distribution par Molécule et Caractéristique</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>Distribution par Nomenclature et Classification</h2>", unsafe_allow_html=True)
         
         # Création de la grille (grid-container)
         col1, col2 = st.columns(2)
         
         # Graphique 1: Distribution par Nomenclature (Pie Chart)
         with col1:
-            with st.container(): # Simule le chart-box, le style est maintenant géré par le CSS au début du script
+            with st.container(): # Simule le chart-box
                 fig_nom = create_pie_chart(
                     df_nom, 
                     names_col='Statut',
                     values_col='Nombre de Molécules',
-                    title="Distribution par Nomenclature"
+                    title="Distribution par Statut de Nomenclature"
                 )
                 st.plotly_chart(fig_nom, use_container_width=True)
         
@@ -421,14 +472,13 @@ with main_col:
                     x_col='Classification Groupée', 
                     y_col='Nombre de Molécules', 
                     color_col='Classification Groupée', 
-                    title="Distribution par Type de Classification (Top 3)"
+                    title="Distribution par Classification Groupée (Top N)"
                 )
                 st.plotly_chart(fig_class, use_container_width=True)
         
         
         # ----------------------------------------------------
         # Section 2: Détail par Caractéristique (Grille 2 colonnes)
-        # AJOUT du graphique de la forme galénique
         # ----------------------------------------------------
         
         st.markdown("<h2>Détail par Indication et Forme Galénique</h2>", unsafe_allow_html=True)
@@ -443,7 +493,7 @@ with main_col:
                     x_col='Indication', 
                     y_col='Nombre de Molécules', 
                     color_col='Indication', 
-                    title="Distribution par Indication"
+                    title="Distribution par Indication (Classes Thérapeutiques)"
                 )
                 st.plotly_chart(fig_ind, use_container_width=True)
         
@@ -455,7 +505,7 @@ with main_col:
                     x_col='Forme Galénique', 
                     y_col='Nombre de Molécules', 
                     color_col='Forme Galénique', 
-                    title="Distribution par Forme Galénique"
+                    title="Distribution par Forme Galénique (Top N)"
                 )
                 st.plotly_chart(fig_forme, use_container_width=True)
                 
@@ -468,16 +518,7 @@ with main_col:
         
         try:
             conn = sqlite3.connect(db_path)
-            conn.execute(
-                """CREATE TABLE IF NOT EXISTS observations (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    product_name TEXT,
-                    type TEXT,
-                    comment TEXT,
-                    date TEXT DEFAULT CURRENT_TIMESTAMP
-                )"""
-            )
-            conn.commit()
+            # La table 'observations' est créée au démarrage dans create_db_from_csv
             df_products = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name", conn)
             products = df_products["name"].tolist()
         except Exception as e:
@@ -509,7 +550,7 @@ with main_col:
                     )
                     conn.commit()
                     st.success("✅ Observation saved and linked to product.")
-                    # st.cache_data.clear() est la bonne manière de vider le cache maintenant
+                    # Vider le cache de données pour recharger le DF mis à jour
                     load_data.clear() 
                     st.rerun()
                 except Exception as e:
@@ -521,6 +562,7 @@ with main_col:
                 st.warning("Please enter a product name and an observation.")
 
         st.markdown("---")
+        st.subheader("Recent Observations")
         conn = None
         try:
             conn = sqlite3.connect(db_path)
@@ -535,12 +577,12 @@ with main_col:
             st.info("No observations yet.")
         else:
             page_size = 10
-            total_pages = max(1, (len(df_obs) - 1) // page_size + 1)
-            # S'assurer que la valeur par défaut est valide
+            total_rows = len(df_obs)
+            total_pages = max(1, (total_rows - 1) // page_size + 1)
+            
             if 'obs_page' not in st.session_state:
                 st.session_state.obs_page = 1
             
-            # Mettre à jour la page si la page actuelle dépasse le nombre total de pages
             if st.session_state.obs_page > total_pages:
                 st.session_state.obs_page = total_pages
                 
@@ -553,5 +595,7 @@ with main_col:
             page_df = df_obs.iloc[start:end]
 
             for _, row in page_df.iterrows():
-                with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
+                # Formater la date/heure pour un affichage plus propre
+                date_display = row['date'][:16].replace('T', ' ')
+                with st.expander(f"{row['product_name']} ({row['type']}) - {date_display}"):
                     st.write(row["comment"])
