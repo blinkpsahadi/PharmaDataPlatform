@@ -77,152 +77,82 @@ h2 {
 # 🔐 AUTHENTICATION
 # =========================
 if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+    st.session_state.authenticated = False
 if "username" not in st.session_state:
-    st.session_state.username = ""
+    st.session_state.username = ""
 
-# Les identifiants sont maintenant sécurisés dans st.secrets si l'application est déployée.
-# Pour le test local, vous pouvez les définir dans un fichier .streamlit/secrets.toml
 if "credentials" in st.secrets:
-    USERS = dict(st.secrets["credentials"])
+    USERS = dict(st.secrets["credentials"])
+else:
+    USERS = {"admin": "password"} # Default local user for testing
 
 def check_password(username, password):
-    """Vérifie si le nom d'utilisateur et le mot de passe correspondent."""
-    return username in USERS and USERS[username] == password
+    return username in USERS and USERS[username] == password
 
 if not st.session_state.authenticated:
-    st.image("https://placehold.co/150x150/007bff/ffffff/png?text=Pharma", width=150)
-    st.markdown("# 🔒 Pharma Data Connection")
-    with st.form("login_form"):
-        user = st.text_input("Username", value="admin")
-        pwd = st.text_input("Password", type="password", value="adminpwd")
-        submitted = st.form_submit_button("Login")
-        if submitted:
-            if check_password(user, pwd):
-                st.session_state.authenticated = True
-                st.session_state.username = user
-                st.success(f"Welcome {user} 👋")
-                st.rerun()
-            else:
-                st.error("Incorrect Password or Username")
-    st.stop()
-# L'exécution s'arrête ici si l'utilisateur n'est pas authentifié.
-
+    with st.form("login_form"):
+        st.markdown("## 🔒 Connection")
+        user = st.text_input("Username")
+        pwd = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+        if submitted:
+            if check_password(user, pwd):
+                st.session_state.authenticated = True
+                st.session_state.username = user
+                st.success(f"Welcome {user} 👋")
+                st.rerun()
+            else:
+                st.error("Incorrect Password or Username")
+    st.stop()
+else:
+    st.sidebar.markdown(f"**Connected as :** {st.session_state.username}")
+    if st.sidebar.button("🔓 Logout"):
+        st.session_state.authenticated = False
+        st.session_state.username = ""
+        st.rerun()
 
 # ---------------------------
-# DB HELPERS & Data Loading
+# DB HELPERS
 # ---------------------------
-DB_NAME = "all_pharma.db"
-
 @st.cache_data
 def get_db_path():
-    """Retourne le chemin de la base de données."""
-    return DB_NAME
-
-@contextmanager
-def get_db_connection(db_path):
-    """Context Manager pour gérer la connexion SQLite."""
-    conn = None
-    try:
-        conn = sqlite3.connect(db_path)
-        yield conn
-    except Exception as e:
-        st.error(f"FATAL: Database connection error: {e}")
-        conn = None
-    finally:
-        if conn:
-            conn.close()
-
-def create_db_from_csv():
-    """Crée la table 'drugs' et 'observations' dans la base de données à partir des données simulées."""
-    db_path = get_db_path()
-    
-    # Snippet de données consolidé et simplifié avec toutes les colonnes requises
-    # Ajout de plus de diversité pour les graphiques (total de 7 lignes)
-    df_data_snippet = """
-name,scientific_name,Code ATC,price,Observations,Nomenclature,Classification Groupée,Indication,Forme Galénique,price_numeric
-ELPIX,Dasatinib,L01EA02,1000 EUR,,Présent,Protein kinase inhibitors,Oncologie,Comprimé,1000.0
-TASIGNA,Nilotinib,L01EA03,2000 EUR,Expensive.,Présent,Protein kinase inhibitors,Oncologie,Gélule,2000.0
-AFINITOR,Everolimus,L04AH02,500 EUR,Under review.,Présent,Inhibiteurs de mTOR,Immunosupresseur,Comprimé,500.0
-ARAVA,Léflunomide,L04AK01,150 EUR,,Présent,Alkylating agents,Immunosupresseur,Comprimé,150.0
-TERIFLUNO,Tériflunomide,L04AK02,250 EUR,New Entry.,Hors nomenclature,Alkylating agents,Immunosupresseur,Comprimé,250.0
-PIMECROLIMUS CR,Pimecrolimus,D11AH02,50 EUR,Topical use.,Hors nomenclature,Autres,Dermatologie,Crème,50.0
-SYRUP METHADONE 5,Methadone,N07BC02,10 EUR,,Présent,Autres,Antalgiques,Syrup,10.0
-PAIN RX,Oxycodone,N02AA05,100 EUR,,Présent,Opioïdes,Antalgiques,Comprimé,100.0
-IBUPROFEN,Ibuprofen,M01AE01,5 EUR,,Hors nomenclature,AINS,Inflammation,Comprimé,5.0
-CETIRIZINE,Cetirizine,R06AE07,8 EUR,,Présent,Antihistaminiques,Allergie,Gélule,8.0
-FENRIR,Lisinopril,C09AA03,12 EUR,,Présent,IEC,Cardiologie,Comprimé,12.0
-"""
-    
-    try:
-        with get_db_connection(db_path) as conn:
-            if conn:
-                # Lire l'extrait CSV en utilisant StringIO
-                df_base = pd.read_csv(StringIO(df_data_snippet))
-                
-                # S'assurer que les colonnes ont le bon type (même si price_numeric est déjà dans le snippet)
-                if 'price_numeric' not in df_base.columns:
-                     df_base['price_numeric'] = df_base['price'].apply(
-                        lambda x: float(str(x).replace(' EUR', '').replace(',', '.')) if x else 0
-                    )
-                
-                # Écrire les données dans la table 'drugs'
-                df_base.to_sql('drugs', conn, if_exists='replace', index=False)
-                
-                # Créer la table 'observations' si elle n'existe pas
-                conn.execute(
-                    """CREATE TABLE IF NOT EXISTS observations (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        product_name TEXT,
-                        type TEXT,
-                        comment TEXT,
-                        date TEXT DEFAULT CURRENT_TIMESTAMP
-                    )"""
-                )
-                conn.commit()
-    except Exception as e:
-        # L'erreur est gérée par le context manager, mais on peut ré-afficher si la connexion échoue
-        pass
-
-# Exécuter la création de la DB une fois au début
-create_db_from_csv()
-
+    possible = [
+        os.path.join(os.getcwd(), "data", "all_pharma.db"),
+        "data/all_pharma.db",
+        "all_pharma.db",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "all_pharma.db")
+    ]
+    for p in possible:
+        if os.path.exists(p):
+            return p
+    st.error("❌ Database not found. Place 'all_pharma.db' in the `data/` folder or next to the app.")
+    st.stop()
 
 @st.cache_data
 def load_data():
-    """Charge les données de la table 'drugs'."""
-    db = get_db_path()
-    df = pd.DataFrame()
-    try:
-        with get_db_connection(db) as conn:
-            if conn:
-                # Charger TOUTES les colonnes disponibles
-                df = pd.read_sql_query("SELECT * FROM drugs", conn)
-                # Remplacer les NaN/None par des chaînes vides pour la recherche
-                df = df.fillna('')
-                # S'assurer que price_numeric est un nombre pour les calculs de dashboard
-                if 'price_numeric' in df.columns:
-                    df['price_numeric'] = pd.to_numeric(df['price_numeric'], errors='coerce').fillna(0)
-                else:
-                    df['price_numeric'] = 0.0
+    db = get_db_path()
+    conn = sqlite3.connect(db)
+    try:
+        df = pd.read_sql_query("SELECT * FROM drugs", conn)
+    except Exception as e:
+        conn.close()
+        st.error(f"Error loading 'drugs' table: {e}")
+        st.stop()
+    conn.close()
+    return df
 
-    except Exception as e:
-        st.error(f"❌ Database error on loading: {e}. Cannot run app without data.")
-        # Créer un DataFrame minimal si la DB est inaccessible (pour la robustesse de l'UI)
-        df = pd.DataFrame({
-            "name": ["Placeholder Drug"],
-            "scientific_name": ["Simulated Substance"],
-            "Code ATC": ["N/A"],
-            "price": ["0 EUR"],
-            "Observations": ["Database connection failed."],
-            "Nomenclature": ["N/A"],
-            "Classification Groupée": ["N/A"],
-            "Indication": ["N/A"],
-            "Forme Galénique": ["N/A"],
-            "price_numeric": [0.0]
-        })
-    return df
+def ensure_observation_column():
+    db = get_db_path()
+    conn = sqlite3.connect(db)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(drugs);")
+    columns = [info[1] for info in cursor.fetchall()]
+    if "Observations" not in columns:
+        cursor.execute("ALTER TABLE drugs ADD COLUMN Observations TEXT;")
+        conn.commit()
+    conn.close()
 
+ensure_observation_column()
 
 # ---------------------------
 # APP NAVIGATION
@@ -650,4 +580,5 @@ with main_col:
                 date_display = row['date'][:19].replace('-', '/').replace(' ', ' - ')
                 with st.expander(f"{row['product_name']} ({row['type']}) - **{date_display}**"):
                     st.write(row["comment"])
+
 
