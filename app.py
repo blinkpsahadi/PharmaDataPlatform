@@ -1,391 +1,353 @@
-import streamlit as st
+# -*- coding: utf-8 -*-
+"""
+Script Python pour Google Colab : Analyse des Immunosuppresseurs
+Ce script lit les données Excel (.xlsx), génère des visualisations interactives
+avec Plotly et les enregistre dans un fichier HTML.
+"""
+
 import pandas as pd
-import sqlite3
 import plotly.express as px
+from plotly.offline import plot
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
 import os
-import re
+from datetime import datetime
 
-# ---------------------------
-# PAGE CONFIG
-# ---------------------------
-st.set_page_config(page_title="My Pharma Dashboard", page_icon="💊", layout="wide")
+# --- 1. CONFIGURATION ET NETTOYAGE DES DONNÉES ---
 
-st.markdown("""
-<style>
-[data-testid="stHeader"], [data-testid="stToolbar"], header {display: none !important;}
-[data-testid="stSidebar"] {display: none !important;}
-[data-testid="stAppViewContainer"] > .main {
-    margin-top: 0 !important;
-    padding-top: 2.5rem !important;
-}
-.block-container { padding: 1rem 2rem !important; }
+# Nom du fichier téléchargé sur Colab
+# IMPORTANT: Utilisation du nom du fichier Excel original
+# NOTE: Le nom du fichier a été ajusté en fonction de l'artefact détecté :
+FILE_NAME = "CLASSIFICATION_DES_IMMUNOSUPRESSEURS_ATC_DDD_NOMENCLATURE.xlsx"
+OUTPUT_HTML_FILE = "rapport_immunsuppresseurs.html"
 
-@media (max-width: 768px) {
-    [data-testid="stAppViewContainer"] > .main { padding-top: 1.8rem !important; }
-    .block-container { padding: 0.6rem 1rem !important; }
-    .stButton>button { width: 100% !important; }
-    .stMarkdown, .stTextInput, .stSelectbox, .stTextArea { font-size: 14px !important; }
-    .stExpander { margin-bottom: 0.8rem !important; }
-    h1, h2, h3 { font-size: 1.1rem !important; }
-}
-.stDataFrame, .stTable {
-    overflow-x: auto !important;
-    display: block !important;
-}
-</style>
-""", unsafe_allow_html=True)
+# Assurez-vous d'avoir installé les dépendances si vous utilisez un nouvel environnement :
+# !pip install pandas plotly openpyxl
 
-# =========================
-# 🔐 AUTHENTICATION
-# =========================
-if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
-if "username" not in st.session_state:
-    st.session_state.username = ""
+def load_and_prepare_data(file_path):
+    """Charge le fichier Excel, gère les lignes d'en-tête et normalise les colonnes."""
+    print(f"Chargement du fichier : {file_path}")
 
-if "credentials" in st.secrets:
-    USERS = dict(st.secrets["credentials"])
-else:
-    USERS = {}
+    # Lecture du fichier Excel (.xlsx) avec openpyxl
+    # Nous lisons la première feuille (sheet_name=0) et définissons la deuxième ligne (index 1) comme l'en-tête.
+    df = pd.read_excel(file_path, header=1, sheet_name=0)
 
-def check_password(username, password):
-    return username in USERS and USERS[username] == password
+    # Nettoyage de base : retirer les lignes entièrement vides
+    df.dropna(how='all', inplace=True)
 
-if not st.session_state.authenticated:
-    with st.form("login_form"):
-        st.markdown("## 🔒 Connection")
-        user = st.text_input("Username")
-        pwd = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
-        if submitted:
-            if check_password(user, pwd):
-                st.session_state.authenticated = True
-                st.session_state.username = user
-                st.success(f"Welcome {user} 👋")
-                st.rerun()
-            else:
-                st.error("Incorrect Password or Username")
-    st.stop()
-else:
-    st.sidebar.markdown(f"**Connected as :** {st.session_state.username}")
-    if st.sidebar.button("🔓 Logout"):
-        st.session_state.authenticated = False
-        st.session_state.username = ""
-        st.rerun()
+    # --- VÉRIFICATION DES NOMS DE COLONNES ET RENOMMAGE ---
+    # Dictionnaire de mappage des colonnes : {Nom EXACT dans Excel : Nom standard utilisé dans le script}
+    column_mapping = {
+        'DCI': 'DCI',
+        'Forme': 'Forme',
+        'Laboratoire Fabricant': 'Laboratoire Fabricant',
+        'Nomenclature': 'Nomenclature',
+        'INDICATION': 'Indication', # Renomme 'INDICATION' (majuscules) en 'Indication' (casse standard)
+        'Type de Classification': 'Type de Classification', # Le nom exact trouvé
+    }
 
-# ---------------------------
-# DB HELPERS
-# ---------------------------
-@st.cache_data
-def get_db_path():
-    possible = [
-        os.path.join(os.getcwd(), "data", "all_pharma.db"),
-        "data/all_pharma.db",
-        "all_pharma.db",
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "all_pharma.db")
-    ]
-    for p in possible:
-        if os.path.exists(p):
-            return p
-    st.error("❌ Database not found. Place 'all_pharma.db' in the `data/` folder or next to the app.")
-    st.stop()
+    rename_dict = {}
+    found_cols = df.columns.tolist()
 
-@st.cache_data
-def load_data():
-    db = get_db_path()
-    conn = sqlite3.connect(db)
-    try:
-        df = pd.read_sql_query("SELECT * FROM drugs", conn)
-    except Exception as e:
-        conn.close()
-        st.error(f"Error loading 'drugs' table: {e}")
-        st.stop()
-    conn.close()
+    print("Noms des colonnes trouvées après chargement :", found_cols)
+
+    required_cols_to_map = list(column_mapping.keys())
+
+    for excel_name, script_name in column_mapping.items():
+        # Trouver la colonne exacte
+        if excel_name in found_cols:
+            rename_dict[excel_name] = script_name
+        # Gérer le cas où la casse diffère (ex: 'indication' au lieu de 'INDICATION')
+        elif excel_name.upper() in found_cols and excel_name.upper() != excel_name:
+            rename_dict[excel_name.upper()] = script_name
+        # Gérer le cas où la colonne est en minuscule
+        elif excel_name.lower() in found_cols and excel_name.lower() != excel_name:
+            rename_dict[excel_name.lower()] = script_name
+
+
+    # --- Vérification critique que les colonnes nécessaires sont présentes ---
+    # On vérifie que les clés standardisées (les valeurs du dictionnaire de mapping) existent dans le df après renommage simulé
+    current_cols = set(found_cols)
+    for excel_name, script_name in column_mapping.items():
+        if excel_name in rename_dict:
+            current_cols.add(script_name)
+
+    missing_cols = [script_name for excel_name, script_name in column_mapping.items() if script_name not in current_cols]
+
+    if missing_cols:
+        raise ValueError(f"Colonnes manquantes ou mal nommées après la vérification. Les colonnes requises dans le script sont : {list(column_mapping.values())}. Colonnes trouvées (initiales) : {found_cols}")
+
+    df.rename(columns=rename_dict, inplace=True)
+
+    # Remplacement des valeurs manquantes (NaN) par une chaîne claire pour les graphiques
+    df.fillna({'Laboratoire Fabricant': 'Non Spécifié', 'Indication': 'Non Spécifiée', 'Nomenclature': 'Non Spécifié', 'DCI': 'Non Spécifiée'}, inplace=True)
+
+    # Conversion des colonnes de texte en chaînes et suppression des espaces blancs
+    cols_to_clean = ['Forme', 'Indication', 'Laboratoire Fabricant', 'Nomenclature', 'Type de Classification', 'DCI']
+    for col in cols_to_clean:
+        if col in df.columns:
+            # Nettoyage et capitalisation des premières lettres
+            df[col] = df[col].astype(str).str.strip()
+            df[col] = df[col].apply(lambda x: x.capitalize() if x.lower() not in ['nan', 'non spécifié'] else x)
+
+    # --- AJOUT DU NETTOYAGE SPÉCIFIQUE POUR LA NOMENCLATURE ---
+    if 'Nomenclature' in df.columns:
+        # Remplacer les chaînes vides (qui ne sont pas NaN) par 'Non Spécifié'
+        df['Nomenclature'].replace('', 'Non Spécifié', inplace=True)
+        # Assurer l'uniformité de la casse pour les valeurs clés
+        df['Nomenclature'] = df['Nomenclature'].apply(lambda x: x.capitalize() if isinstance(x, str) else x)
+    # --------------------------------------------------------
+
+    print(f"Données chargées. Nombre de lignes après nettoyage : {len(df)}")
     return df
 
-def ensure_observation_column():
-    db = get_db_path()
-    conn = sqlite3.connect(db)
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(drugs);")
-    columns = [info[1] for info in cursor.fetchall()]
-    if "Observations" not in columns:
-        cursor.execute("ALTER TABLE drugs ADD COLUMN Observations TEXT;")
-        conn.commit()
-    conn.close()
+# --- 2. FONCTIONS DE CRÉATION DE GRAPHIQUES ---
 
-ensure_observation_column()
-
-# ---------------------------
-# PLOTLY CHART HELPER FUNCTION
-# ---------------------------
-def create_count_chart_streamlit(df, column, chart_type='bar', molecule_col='name', title_suffix=""):
+def create_count_chart(df, column, chart_type='bar'):
     """
-    Crée un graphique de comptage (Barre ou Camembert) pour une colonne catégorielle, 
-    en agrégeant les noms des molécules (colonne 'name' ou spécifiée) pour le survol.
-    Adapté pour Streamlit.
+    Crée un graphique de comptage (Barre ou Camembert) pour une colonne catégorielle,
+    avec la liste des DCI affichée au survol.
     """
-    
-    # 1. Filtration des valeurs vides ou manquantes pour la colonne cible
-    valid_df = df[df[column].astype(str).str.strip() != ""].copy()
-    if valid_df.empty or molecule_col not in valid_df.columns:
-        return None, f"No valid data or '{molecule_col}' column found for {column.upper()}."
 
-    # 2. Agrégation: compte et agrégation des noms de molécules
-    counts = valid_df.groupby(column).agg(
-        Count=(molecule_col, 'size'),
-        # Agrège les noms de molécules uniques et les sépare par un saut de ligne HTML
-        Molecule_List=(molecule_col, lambda x: '<br>' + '<br>'.join(x.unique()))
+    # Agrégation des données : compte et agrégation des DCI
+    counts = df.groupby(column).agg(
+        Count=('DCI', 'size'),
+        # Agrège les DCI uniques et les sépare par un saut de ligne HTML
+        DCI_List=('DCI', lambda x: '<br>' + '<br>'.join(x.unique()))
     ).reset_index()
-    
-    title = f"Distribution by {column.upper()} {title_suffix}"
-    custom_data = ['Molecule_List'] 
+
+    # Définition du titre
+    title = f"Distribution par {column}"
+
+    # Configuration du modèle de survol (hovertemplate)
+    hover_text_pie = "<b>%{label}</b><br>Molécules : %{value}<br>Liste des DCI : %{customdata[0]}<extra></extra>"
 
     if chart_type == 'pie':
-        # Style Pie Chart (avec ajustement de la légende pour éviter le débordement)
-        hover_text_pie = "<b>%{label}</b><br>Count : %{value}<br>Molecules : %{customdata[0]}<extra></extra>"
+        # Graphique en camembert
         fig = px.pie(
-            counts, 
-            values='Count', 
-            names=column, 
+            counts,
+            values='Count',
+            names=column,
             title=title,
             color=column,
             color_discrete_sequence=px.colors.qualitative.Pastel,
-            hole=.3, 
-            custom_data=custom_data
+            hole=.3,
+            custom_data=['DCI_List'] # Ajout de la liste des DCI comme donnée personnalisée
         )
-        fig.update_traces(textposition='auto', textinfo='percent', hovertemplate=hover_text_pie)
+        # Utilisation de 'auto' pour la position et 'percent' pour l'info pour maximiser la lisibilité
+        fig.update_traces(textposition='auto', textinfo='percent',
+                          hovertemplate=hover_text_pie)
+
+        # Ajout de la configuration de la légende pour éviter l'overflow
         fig.update_layout(
-            legend=dict(orientation="h", yanchor="bottom", y=-0.15, xanchor="center", x=0.5),
             uniformtext_minsize=12, uniformtext_mode='hide', showlegend=True,
-            template='plotly_white'
+            legend=dict(
+                orientation="h",  # Légende horizontale
+                yanchor="bottom",
+                y=-0.15,          # Position légèrement sous le graphique
+                xanchor="center",
+                x=0.5
+            )
         )
-        
-    else: # Default Bar chart
-        # Style Bar Chart
-        bar_hover_text = "<b>%{x}</b><br>Count : %{y}<br>Molecules : %{customdata[0]}<extra></extra>"
+
+    else: # Bar chart
+        # Configuration du modèle de survol pour les barres
+        bar_hover_text = "<b>%{x}</b><br>Molécules : %{y}<br>Liste des DCI : %{customdata[0]}<extra></extra>"
 
         fig = px.bar(
-            counts, 
-            x=column, 
-            y='Count', 
+            counts,
+            x=column,
+            y='Count',
             title=title,
             color=column,
             color_discrete_sequence=px.colors.qualitative.Dark24,
             text='Count',
-            custom_data=custom_data
+            custom_data=['DCI_List'] # Ajout de la liste des DCI comme donnée personnalisée
         )
         fig.update_traces(texttemplate='%{text}', textposition='outside', hovertemplate=bar_hover_text)
-        fig.update_layout(
-            xaxis={'categoryorder':'total descending'}, 
-            yaxis_title="Count of Molecules",
-            template='plotly_white'
-        )
+        fig.update_layout(xaxis={'categoryorder':'total descending'}, yaxis_title="Nombre de Molécules")
 
-    # Uniformisation de la hauteur (500px) et des marges pour les deux types de graphiques
+    # Réduction de la hauteur globale pour un meilleur ajustement dans le grid-container
     fig.update_layout(
-        height=500,
-        margin=dict(t=50, l=20, r=20, b=20)
+        title_font_size=20,
+        margin=dict(t=50, l=20, r=20, b=20),
+        height=500, # Hauteur ajustée
+        template='plotly_white'
+    )
+    return fig
+
+def create_all_charts(df):
+    """Génère tous les graphiques requis et retourne leur code HTML."""
+
+    charts_html = []
+
+    # 1. Classification (Type) - BAR CHART
+    classification_counts = df['Type de Classification'].value_counts()
+    top_n = 8
+    top_classifications = classification_counts.nlargest(top_n).index
+
+    df_class = df.copy()
+    # Regrouper les petites catégories pour la clarté
+    df_class['Classification Groupée'] = df_class['Type de Classification'].apply(
+        lambda x: x if x in top_classifications else 'Autres Classifications'
     )
 
-    return fig, None
+    fig1 = create_count_chart(df_class, 'Classification Groupée', chart_type='bar')
+    fig1.update_layout(title="Distribution par Type de Classification (Top 8 et Autres)")
+    charts_html.append(plot(fig1, output_type='div', include_plotlyjs=False))
 
+    # 2. Forme - Bar Chart
+    fig2 = create_count_chart(df, 'Forme', chart_type='bar')
+    charts_html.append(plot(fig2, output_type='div', include_plotlyjs=False))
 
-# ---------------------------
-# APP NAVIGATION
-# ---------------------------
-menu_options = ["🏠 Home", "💊 Products", "📊 Dashboard", "🧾 Observations"]
-left_col, main_col = st.columns([1, 4], gap="small")
+    # 3. Indication - Bar Chart
+    fig3 = create_count_chart(df, 'Indication', chart_type='bar')
+    charts_html.append(plot(fig3, output_type='div', include_plotlyjs=False))
 
-with left_col:
-    st.markdown("### 💊 Navigation")
-    if "nav_selection" not in st.session_state:
-        st.session_state.nav_selection = menu_options[0]
-    selected_index = menu_options.index(st.session_state.nav_selection)
-    st.session_state.nav_selection = st.radio(
-        "Menu", menu_options, index=selected_index, key="nav_selection_radio"
+    # 4. Laboratoire Fabricant - Bar Chart
+    # Regrouper les petits laboratoires pour la clarté
+    top_labs = df['Laboratoire Fabricant'].value_counts().nlargest(10).index
+    df_labs = df.copy()
+    df_labs['Laboratoire Fabricant Groupé'] = df_labs['Laboratoire Fabricant'].apply(
+        lambda x: x if x in top_labs else 'Autres Laboratoires'
     )
-    st.markdown("---")
-    st.markdown(f"**Connected as:** `{st.session_state.username}`")
-    if st.button("🚪 Logout", use_container_width=True):
-        st.session_state.authenticated = False
-        st.session_state.username = ""
-        st.rerun()
+    fig4 = create_count_chart(df_labs, 'Laboratoire Fabricant Groupé', chart_type='bar')
+    fig4.update_layout(title="Distribution par Laboratoire Fabricant (Top 10 + Autres)")
+    charts_html.append(plot(fig4, output_type='div', include_plotlyjs=False))
 
-with main_col:
-    menu = st.session_state.get("nav_selection", menu_options[0])
+    # 5. Nomenclature - Pie Chart (Binaire)
+    fig5 = create_count_chart(df, 'Nomenclature', chart_type='pie')
+    charts_html.append(plot(fig5, output_type='div', include_plotlyjs=False))
 
-    # HOME
-    if menu == "🏠 Home":
-        st.title("💊 Pharma Data Platform")
-        st.markdown("Welcome to the Pharmaceutical Management & Analysis Platform 📊")
+    return charts_html
 
-    # PRODUCTS
-    elif menu == "💊 Products":
-        st.header("💊 List of Products")
-        df = load_data()
+# --- 3. ASSEMBLAGE FINAL DE LA PAGE HTML ---
 
-        search = st.text_input("🔍 Search by name or substance")
-        if search:
-            search_cols = ["name", "type", "scientific_name"]
-            available_cols = [c for c in search_cols if c in df.columns]
-            mask = False
-            for c in available_cols:
-                mask |= df[c].astype(str).str.contains(search, case=False, na=False)
-            df = df[mask]
+def generate_final_html(charts_html_list, output_file):
+    """Crée le fichier HTML final en intégrant les graphiques et le style."""
 
-        items_per_page = 50
-        total_pages = max(1, (len(df) - 1) // items_per_page + 1)
-        page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
-        subset = df.iloc[(page - 1) * items_per_page : page * items_per_page]
+    # La librairie Plotly doit être incluse une seule fois (via CDN)
+    plotly_js_cdn = '<script src="https://cdn.plot.ly/plotly-2.30.0.min.js" charset="utf-8"></script>'
 
-        for _, row in subset.iterrows():
-            with st.expander(f"💊 {row['name']}"):
-                st.write(f"**Scientific name:** {row.get('scientific_name', 'N/A')}")
-                st.write(f"**Code ATC:** {row.get('Code ATC', 'N/A')}") 
-                st.write(f"**Type:** {row.get('type', 'N/A')}")
-                st.write(f"**Price:** {row.get('price', 'N/A')}")
-                obs_text = row.get("Observations", "")
-                st.markdown("**🩺 Observation:**")
-                if obs_text and str(obs_text).strip() != "":
-                    st.info(obs_text)
-                else:
-                    st.write("_No observation recorded for this product._")
+    html_content = f"""
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapport d'Analyse des Immunosuppresseurs - {datetime.now().strftime('%Y-%m-%d')}</title>
+    {plotly_js_cdn}
+    <style>
+        body {{
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }}
+        .container {{
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #007bff;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+            font-size: 2em;
+        }}
+        h2 {{
+            color: #34495e;
+            margin-top: 40px;
+            font-size: 1.5em;
+        }}
+        .chart-box {{
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }}
+        .grid-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(450px, 1fr));
+            gap: 20px;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Synthèse des Données sur les Immunosuppresseurs (Forme Sèche)</h1>
+        <p>Analyse des molécules {datetime.now().strftime('%d/%m/%Y')}.</p>
 
-    # DASHBOARD
-    elif menu == "📊 Dashboard":
-        st.header("📊 Global Analysis")
-        df = load_data()
-        
-        # Préparation des données de prix
-        def safe_extract(val):
-            try:
-                match = re.search(r"[\d,.]+", str(val))
-                # Nettoyage de la valeur : retire la virgule pour la conversion float
-                return float(match.group().replace(",", "")) if match else None
-            except Exception:
-                return None
-                
-        df["Prix_num"] = df["price"].apply(safe_extract)
-        df = df.fillna("")
+        <h2>Distribution Totale</h2>
 
-        # Colonne contenant les noms de molécules pour le survol
-        molecule_column_name = 'name' 
+        <div class="grid-container">
+            <div class="chart-box">
+                <!-- Graphique Nomenclature (Pie Chart) -->
+                {charts_html_list[4]}
+            </div>
+            <div class="chart-box">
+                <!-- Graphique Type de Classification (Bar Chart) -->
+                {charts_html_list[0]}
+            </div>
+        </div>
 
-        # Graphiques catégoriels (Maintenant en BAR CHARTS avec survol interactif)
-        categorical_cols = ["Code ATC", "bcs", "oeb", "bioequivalence"]
-        
-        # Affichage en deux colonnes pour les petits graphiques
-        cols = st.columns(2)
-        col_index = 0
-        
-        for col in categorical_cols:
-            if col in df.columns:
-                # Utilisation du Bar Chart par défaut pour la lisibilité
-                fig, error = create_count_chart_streamlit(df, col, chart_type='bar', molecule_col=molecule_column_name)
-                
-                if fig:
-                    with cols[col_index % 2]:
-                        st.plotly_chart(fig, use_container_width=True)
-                    col_index += 1
-                elif error:
-                    # Pour éviter une erreur de st.info si l'une des colonnes n'est pas présente dans le dataframe
-                    pass # st.info(f"No valid data to display for {col.upper()}.")
+        <h2>Détail par Caractéristique</h2>
 
-        # Cas spécial: 'type' column (Classes Thérapeutiques)
-        # Affiché sur la pleine largeur
-        if "type" in df.columns:
-            fig_class, error_class = create_count_chart_streamlit(df, "type", chart_type='bar', molecule_col=molecule_column_name)
-            
-            if fig_class:
-                fig_class.update_layout(title="Therapeutical Classes") # Titre spécifique
-                st.plotly_chart(fig_class, use_container_width=True)
-            elif error_class:
-                st.info(error_class)
+        <div class="chart-box">
+            <!-- Graphique Indication (Bar Chart) -->
+            {charts_html_list[2]}
+        </div>
+
+        <div class="chart-box">
+            <!-- Graphique Forme (Bar Chart) -->
+            {charts_html_list[1]}
+        </div>
+
+        <div class="chart-box">
+            <!-- Graphique Laboratoire Fabricant (Bar Chart) -->
+            {charts_html_list[3]}
+        </div>
+
+        <p style="text-align: center; margin-top: 40px; font-size: 0.8em; color: #666;">Rapport généré par le script d'analyse des données.</p>
+    </div>
+</body>
+</html>
+    """
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write(html_content)
+
+    print(f"\n✅ Fichier HTML interactif généré avec succès : {output_file}")
 
 
-        # Graphiques de prix (inchangés dans leur principe, mais avec style uniforme)
-        valid_prices = df[pd.to_numeric(df["Prix_num"], errors="coerce").notna()].copy()
-        valid_prices["Prix_num"] = valid_prices["Prix_num"].astype(float)
+# --- 4. EXÉCUTION PRINCIPALE ---
+if __name__ == "__main__":
+    try:
+        # 1. Charger et préparer les données
+        data_frame = load_and_prepare_data(FILE_NAME)
 
-        if not valid_prices.empty:
-            st.markdown("---")
-            st.subheader("Price Analysis")
+        # 2. Créer les graphiques
+        all_charts_html = create_all_charts(data_frame)
 
-            # Top 10 Bar Chart (prix)
-            top10 = valid_prices.nlargest(10, "Prix_num")
-            fig_top10 = px.bar(top10, x="name", y="Prix_num", 
-                     title="Top 10 Most Expensive Medicines",
-                     template='plotly_white',
-                     height=500) # Hauteur uniforme
-            st.plotly_chart(fig_top10, use_container_width=True)
+        # 3. Générer le rapport HTML
+        generate_final_html(all_charts_html, OUTPUT_HTML_FILE)
 
-            # Price Distribution Histogram
-            fig_hist = px.histogram(valid_prices, x="Prix_num", nbins=20, 
-                           title="Price Distribution",
-                           template='plotly_white',
-                           height=500) # Hauteur uniforme
-            st.plotly_chart(fig_hist, use_container_width=True)
-        else:
-            st.info("No valid numeric price data to display.")
+        # 4. Afficher un message de confirmation
+        print("\n--- ÉTAPES SUIVANTES ---")
+        print(f"Le fichier de rapport HTML '{OUTPUT_HTML_FILE}' est prêt.")
+        print("Téléchargez ce fichier et ouvrez-le dans votre navigateur pour visualiser les graphiques interactifs.")
 
-    # OBSERVATIONS
-    elif menu == "🧾 Observations":
-        st.header("🩺 Commercial & Medical Observations")
-        db_path = get_db_path()
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            """CREATE TABLE IF NOT EXISTS observations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                product_name TEXT,
-                type TEXT,
-                comment TEXT,
-                date TEXT DEFAULT CURRENT_TIMESTAMP
-            )"""
-        )
-        conn.commit()
-        df_products = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name", conn)
-        products = df_products["name"].tolist()
-        conn.close()
-
-        with st.form("new_obs", clear_on_submit=True):
-            product = st.selectbox("Product", ["Type manually..."] + products)
-            obs_type = st.selectbox("Type", ["Commercial", "Medical", "Other"])
-            if product == "Type manually...":
-                product = st.text_input("Manual Product Name")
-            comment = st.text_area("💬 Observation")
-            submit = st.form_submit_button("💾 Save")
-            if submit:
-                conn = sqlite3.connect(db_path)
-                conn.execute(
-                    "INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
-                    (product, obs_type, comment)
-                )
-                conn.execute(
-                    "UPDATE drugs SET Observations = ? WHERE name = ?",
-                    (comment, product)
-                )
-                conn.commit()
-                conn.close()
-                st.success("✅ Observation saved and linked to product.")
-                load_data.clear()
-                st.rerun()
-
-        st.markdown("---")
-        conn = sqlite3.connect(db_path)
-        df_obs = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
-        conn.close()
-
-        if df_obs.empty:
-            st.info("No observations yet.")
-        else:
-            page_size = 10
-            total_pages = max(1, (len(df_obs) - 1) // page_size + 1)
-            page = st.number_input("Page", min_value=1, max_value=total_pages, value=1, step=1)
-            start = (page - 1) * page_size
-            end = start + page_size
-            page_df = df_obs.iloc[start:end]
-
-            for _, row in page_df.iterrows():
-                with st.expander(f"{row['product_name']} ({row['type']}) - {row['date']}"):
-                    st.write(row["comment"])
+    except FileNotFoundError:
+        print(f"\nERREUR: Le fichier '{FILE_NAME}' n'a pas été trouvé.")
+        print(f"Veuillez vous assurer que le fichier Excel est présent dans le même répertoire.")
+    except Exception as e:
+        if 'data_frame' in locals():
+            print(f"\nSuggestion : Vérifiez le nom exact des colonnes. Colonnes trouvées : {data_frame.columns.tolist()}")
+        print(f"\nUne erreur inattendue s'est produite : {e}")
