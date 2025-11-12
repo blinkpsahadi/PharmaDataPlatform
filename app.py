@@ -77,82 +77,123 @@ h2 {
 # 🔐 AUTHENTICATION
 # =========================
 if "authenticated" not in st.session_state:
-    st.session_state.authenticated = False
+    st.session_state.authenticated = False
 if "username" not in st.session_state:
-    st.session_state.username = ""
+    st.session_state.username = ""
 
 if "credentials" in st.secrets:
-    USERS = dict(st.secrets["credentials"])
-else:
-    USERS = {"admin": "password"} # Default local user for testing
-
-def check_password(username, password):
-    return username in USERS and USERS[username] == password
+    USERS = dict(st.secrets["credentials"])
 
 if not st.session_state.authenticated:
-    with st.form("login_form"):
-        st.markdown("## 🔒 Connection")
-        user = st.text_input("Username")
-        pwd = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Login")
-        if submitted:
-            if check_password(user, pwd):
-                st.session_state.authenticated = True
-                st.session_state.username = user
-                st.success(f"Welcome {user} 👋")
-                st.rerun()
-            else:
-                st.error("Incorrect Password or Username")
-    st.stop()
-else:
-    st.sidebar.markdown(f"**Connected as :** {st.session_state.username}")
-    if st.sidebar.button("🔓 Logout"):
-        st.session_state.authenticated = False
-        st.session_state.username = ""
-        st.rerun()
+    with st.form("login_form"):
+        st.markdown("## 🔒 Connection")
+        user = st.text_input("Username")
+        pwd = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Login")
+        if submitted:
+            if check_password(user, pwd):
+                st.session_state.authenticated = True
+                st.session_state.username = user
+                st.success(f"Welcome {user} 👋")
+                st.rerun()
+            else:
+                st.error("Incorrect Password or Username")
+    st.stop()
 
 # ---------------------------
-# DB HELPERS
+# DB HELPERS & INITIALIZATION
 # ---------------------------
+
 @st.cache_data
 def get_db_path():
-    possible = [
-        os.path.join(os.getcwd(), "data", "all_pharma.db"),
-        "data/all_pharma.db",
-        "all_pharma.db",
-        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "all_pharma.db")
-    ]
-    for p in possible:
-        if os.path.exists(p):
-            return p
-    st.error("❌ Database not found. Place 'all_pharma.db' in the `data/` folder or next to the app.")
-    st.stop()
+    possible = [
+        os.path.join(os.getcwd(), "data", "all_pharma.db"),
+        "data/all_pharma.db",
+        "all_pharma.db",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "all_pharma.db")
+    ]
+    for p in possible:
+        if os.path.exists(p):
+            return p
+    # Utilisation du fichier 'CLASSIFICATION_DES_IMMUNOSUPRESSEURS_ATC_DDD_NOMENCLATURE.xlsx - Forme Séche .csv' 
+    # et 'all_pharma.xlsx - drugs.csv' comme base temporaire si la DB n'est pas trouvée, 
+    # mais Streamlit ne supporte pas l'accès direct aux fichiers CSV locaux pour des fonctions de mise à jour.
+    # On force l'arrêt pour ne pas générer d'erreurs d'accès.
+    st.error("❌ Database 'all_pharma.db' not found. Please ensure it is available.")
+    st.stop()
+    return "dummy_path_to_stop_error" # Fallback
+
+DB_PATH = get_db_path()
+
+@contextmanager
+def get_db_connection(db_path):
+    """Context manager pour gérer la connexion SQLite, essentielle pour les transactions."""
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row # Optionnel, mais utile
+        yield conn
+    except sqlite3.Error as e:
+        st.error(f"Database connection error: {e}")
+        yield None
+    finally:
+        if conn:
+            conn.close()
 
 @st.cache_data
 def load_data():
-    db = get_db_path()
-    conn = sqlite3.connect(db)
-    try:
-        df = pd.read_sql_query("SELECT * FROM drugs", conn)
-    except Exception as e:
-        conn.close()
-        st.error(f"Error loading 'drugs' table: {e}")
-        st.stop()
-    conn.close()
-    return df
+    """Charge les données de la table 'drugs' dans un DataFrame."""
+    df = pd.DataFrame()
+    try:
+        with get_db_connection(DB_PATH) as conn:
+            if conn:
+                df = pd.read_sql_query("SELECT * FROM drugs", conn)
+    except Exception as e:
+        st.error(f"Error loading 'drugs' table: {e}")
+        st.stop()
+    
+    # Tentative d'ajouter une colonne numérique si elle n'existe pas (pour le Dashboard)
+    if 'price_numeric' not in df.columns and 'price' in df.columns:
+        # Nettoyage et conversion de la colonne 'price'
+        df['price_numeric'] = df['price'].astype(str).str.replace(r'[^\d,.]', '', regex=True).str.replace(',', '.', regex=False)
+        df['price_numeric'] = pd.to_numeric(df['price_numeric'], errors='coerce')
+        # On pourrait ici mettre à jour la DB si on voulait la persistance, mais on se contente du DF en cache.
+        
+    return df
 
-def ensure_observation_column():
-    db = get_db_path()
-    conn = sqlite3.connect(db)
-    cursor = conn.cursor()
-    cursor.execute("PRAGMA table_info(drugs);")
-    columns = [info[1] for info in cursor.fetchall()]
-    if "Observations" not in columns:
-        cursor.execute("ALTER TABLE drugs ADD COLUMN Observations TEXT;")
-        conn.commit()
-    conn.close()
+def ensure_tables_and_columns():
+    """Vérifie et crée la colonne Observations dans 'drugs' et la table 'observations' si nécessaire."""
+    try:
+        with get_db_connection(DB_PATH) as conn:
+            if conn:
+                cursor = conn.cursor()
+                
+                # 1. Vérification/Ajout de la colonne Observations dans 'drugs'
+                cursor.execute("PRAGMA table_info(drugs);")
+                columns = [info[1] for info in cursor.fetchall()]
+                if "Observations" not in columns:
+                    cursor.execute("ALTER TABLE drugs ADD COLUMN Observations TEXT;")
+                    st.success("Column 'Observations' added to 'drugs' table.")
+                
+                # 2. Vérification/Création de la table 'observations'
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS observations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        product_name TEXT NOT NULL,
+                        type TEXT,
+                        comment TEXT,
+                        date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                conn.commit()
+                
+    except Exception as e:
+        st.error(f"Database initialization error: {e}")
+        st.stop()
 
-ensure_observation_column()
+# Exécuter l'initialisation de la DB
+ensure_tables_and_columns()
+
 
 # ---------------------------
 # APP NAVIGATION
@@ -277,8 +318,15 @@ with main_col:
         
         # Vérification des colonnes critiques après chargement
         required_cols = ['Nomenclature', 'Classification Groupée', 'Indication', 'Forme Galénique', 'price_numeric']
-        if df.empty or not all(col in df.columns for col in required_cols):
-            st.error("Data required for the Dashboard is missing or incomplete.")
+        
+        # S'assurer que les colonnes existent, sinon les ajouter comme NaN pour éviter l'échec total
+        for col in required_cols:
+            if col not in df.columns:
+                df[col] = pd.NA
+                st.warning(f"Column '{col}' not found. Dashboard calculations might be incomplete.")
+        
+        if df.empty:
+            st.error("Data required for the Dashboard is missing or empty.")
             st.stop()
             
         # --- Fonction réelle de chargement et calcul des données pour le tableau de bord ---
@@ -287,16 +335,16 @@ with main_col:
             """Calcule les DataFrames de synthèse à partir des données complètes."""
             
             # 1. Distribution par Nomenclature
-            df_nomenclature = df_products.groupby('Nomenclature')['name'].count().reset_index()
+            df_nomenclature = df_products.groupby('Nomenclature', dropna=True)['name'].count().reset_index()
             df_nomenclature.columns = ['Statut', 'Nombre de Molécules']
             
             # 2. Distribution par Classification Groupée (Top 3 + Autres)
-            counts_class = df_products.groupby('Classification Groupée')['name'].count()
+            counts_class = df_products.groupby('Classification Groupée', dropna=True)['name'].count()
             top_n = 3
             if len(counts_class) > top_n:
                 top_classes = counts_class.nlargest(top_n).index.tolist()
                 df_products['Classification Groupée Grouped'] = df_products['Classification Groupée'].apply(
-                    lambda x: x if x in top_classes else 'Autres/Autres Molécules'
+                    lambda x: x if x in top_classes else 'Autres/Autres Molécules' if pd.notna(x) else 'Inconnu'
                 )
                 df_classification = df_products.groupby('Classification Groupée Grouped')['name'].count().reset_index()
                 df_classification.columns = ['Classification Groupée', 'Nombre de Molécules']
@@ -305,17 +353,18 @@ with main_col:
                 df_classification.columns = ['Classification Groupée', 'Nombre de Molécules']
             
             # 3. Distribution par Indication (Top N)
-            df_indication = df_products.groupby('Indication')['name'].count().reset_index()
+            df_indication = df_products.groupby('Indication', dropna=True)['name'].count().reset_index()
             df_indication.columns = ['Indication', 'Nombre de Molécules']
             df_indication = df_indication.sort_values(by='Nombre de Molécules', ascending=False)
             
             # 4. Distribution par Forme Galénique (Top N)
-            df_forme = df_products.groupby('Forme Galénique')['name'].count().reset_index()
+            df_forme = df_products.groupby('Forme Galénique', dropna=True)['name'].count().reset_index()
             df_forme.columns = ['Forme Galénique', 'Nombre de Molécules']
             df_forme = df_forme.sort_values(by='Nombre de Molécules', ascending=False)
             
             # 5. Prix moyen par Classification Groupée (NOUVEAU KPI)
-            df_price_class = df_products.groupby('Classification Groupée').agg(
+            # Exclure les NaNs dans 'price_numeric' pour le calcul
+            df_price_class = df_products[df_products['price_numeric'].notna()].groupby('Classification Groupée').agg(
                 Moyenne_Prix=('price_numeric', 'mean'),
                 Total_Molécules=('name', 'count')
             ).reset_index()
@@ -327,6 +376,8 @@ with main_col:
 
         def create_pie_chart(df, names_col, values_col, title):
             """Crée un diagramme circulaire (Pie Chart) Plotly Express."""
+            if df.empty:
+                return None
             fig = px.pie(
                 df,
                 names=names_col,
@@ -349,6 +400,8 @@ with main_col:
         
         def create_bar_chart(df, x_col, y_col, color_col, title, y_title="Nombre de Molécules"):
             """Crée un diagramme à barres Plotly Express."""
+            if df.empty:
+                return None
             fig = px.bar(
                 df,
                 x=x_col,
@@ -373,6 +426,8 @@ with main_col:
         
         def create_price_bar_chart(df, x_col, y_col, title):
             """Crée un diagramme à barres pour le prix moyen."""
+            if df.empty:
+                return None
             fig = px.bar(
                 df,
                 x=x_col,
@@ -421,7 +476,10 @@ with main_col:
                     values_col='Nombre de Molécules',
                     title="Distribution par Statut de Nomenclature"
                 )
-                st.plotly_chart(fig_nom, use_container_width=True)
+                if fig_nom:
+                    st.plotly_chart(fig_nom, use_container_width=True)
+                else:
+                    st.info("No data for Nomenclature distribution.")
         
         # Graphique 2: Distribution par Type de Classification (Bar Chart)
         with col2:
@@ -433,7 +491,10 @@ with main_col:
                     color_col='Classification Groupée', 
                     title="Distribution par Classification Groupée (Top N)"
                 )
-                st.plotly_chart(fig_class, use_container_width=True)
+                if fig_class:
+                    st.plotly_chart(fig_class, use_container_width=True)
+                else:
+                    st.info("No data for Classification distribution.")
         
         
         # ----------------------------------------------------
@@ -448,25 +509,31 @@ with main_col:
         with col3:
             with st.container(): 
                 fig_ind = create_bar_chart(
-                    df_ind, 
+                    df_ind.head(10), # Limité au top 10 pour la lisibilité
                     x_col='Indication', 
                     y_col='Nombre de Molécules', 
                     color_col='Indication', 
-                    title="Distribution par Indication"
+                    title="Top 10 Distributions par Indication"
                 )
-                st.plotly_chart(fig_ind, use_container_width=True)
+                if fig_ind:
+                    st.plotly_chart(fig_ind, use_container_width=True)
+                else:
+                    st.info("No data for Indication distribution.")
         
         # Graphique 4: Distribution par Forme Galénique
         with col4:
             with st.container(): 
                 fig_forme = create_bar_chart(
-                    df_forme, 
+                    df_forme.head(10), # Limité au top 10 pour la lisibilité
                     x_col='Forme Galénique', 
                     y_col='Nombre de Molécules', 
                     color_col='Forme Galénique', 
-                    title="Distribution par Forme Galénique"
+                    title="Top 10 Distributions par Forme Galénique"
                 )
-                st.plotly_chart(fig_forme, use_container_width=True)
+                if fig_forme:
+                    st.plotly_chart(fig_forme, use_container_width=True)
+                else:
+                    st.info("No data for Forme Galénique distribution.")
         
         st.markdown("---")
         
@@ -478,19 +545,23 @@ with main_col:
                 y_col='Moyenne_Prix',
                 title="Prix Moyen par Classification Groupée (EUR)"
             )
-            st.plotly_chart(fig_price, use_container_width=True)
+            if fig_price:
+                st.plotly_chart(fig_price, use_container_width=True)
+            else:
+                st.info("No numerical price data available for price analysis.")
 
 
     # OBSERVATIONS
     elif menu == "🧾 Observations":
         st.header("🩺 Commercial & Medical Observations")
-        db_path = get_db_path()
+        
         products = []
         
         try:
-            with get_db_connection(db_path) as conn:
+            with get_db_connection(DB_PATH) as conn:
                 if conn:
                     # Charger la liste des produits existants pour le selectbox
+                    # Utiliser le nom des médicaments pour le formulaire
                     df_products = pd.read_sql_query("SELECT DISTINCT name FROM drugs ORDER BY name", conn)
                     products = df_products["name"].tolist()
         except Exception as e:
@@ -516,7 +587,7 @@ with main_col:
             
             if submit and final_product_name and comment:
                 try:
-                    with get_db_connection(db_path) as conn:
+                    with get_db_connection(DB_PATH) as conn:
                         if conn:
                             # 1. Insertion dans la table des observations
                             conn.execute(
@@ -547,7 +618,7 @@ with main_col:
         
         df_obs = pd.DataFrame()
         try:
-            with get_db_connection(db_path) as conn:
+            with get_db_connection(DB_PATH) as conn:
                 if conn:
                     df_obs = pd.read_sql_query("SELECT * FROM observations ORDER BY date DESC", conn)
         except Exception:
@@ -567,7 +638,9 @@ with main_col:
                 st.session_state.obs_page = total_pages
                 
             page = st.number_input("Page", min_value=1, max_value=total_pages, 
-                                    value=st.session_state.obs_page, step=1, key="obs_page_input")
+                                    value=st.session_state.obs_page, step=1, key="obs_page_input", 
+                                    label_visibility="collapsed") # Ajout d'une visibilité réduite pour l'input
+            st.markdown(f"**Page {page} of {total_pages}** ({total_rows} items total)", help="History Pagination")
             st.session_state.obs_page = page
             
             start = (page - 1) * page_size
@@ -580,5 +653,3 @@ with main_col:
                 date_display = row['date'][:19].replace('-', '/').replace(' ', ' - ')
                 with st.expander(f"{row['product_name']} ({row['type']}) - **{date_display}**"):
                     st.write(row["comment"])
-
-
