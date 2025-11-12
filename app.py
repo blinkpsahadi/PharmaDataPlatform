@@ -5,7 +5,7 @@ import plotly.express as px
 import os
 import re
 from datetime import date # Ajout de l'importation manquante pour la fonction load_data simulée
-
+from io import StringIO
 # ---------------------------
 # PAGE CONFIG
 # ---------------------------
@@ -113,62 +113,31 @@ DB_NAME = "all_pharma.db"
 
 @st.cache_data
 def get_db_path():
-    # En environnement réel, cela trouve le chemin du fichier.
-    # Dans l'immersive, nous nous fions à la création/existence du fichier dans le CWD (current working directory)
     return DB_NAME
 
 def create_db_from_csv():
-    """Crée la table 'drugs' dans la base de données à partir des données du fichier joint."""
+    """Crée la table 'drugs' dans la base de données à partir des données simulées."""
     db_path = get_db_path()
     conn = None
     
-    # Simuler le chargement du fichier CSV/Excel fourni dans le contexte
-    # Les fichiers joints sont accessibles sous forme de chaînes de texte/csv
-    # Nous utilisons le fichier 'CLASSIFICATION_DES_IMMUNOSUPRESSEURS_ATC_DDD_NOMENCLATURE.xlsx - Forme Séche .csv'
-    # car il contient les colonnes de classification détaillées nécessaires au dashboard.
+    # Snippet de données consolidé et simplifié avec toutes les colonnes requises
+    df_data_snippet = """
+name,scientific_name,Code ATC,price,Observations,Nomenclature,Classification Groupée,Indication,Forme Galénique
+ELPIX,Dasatinib,L01EA02,1000 EUR,,Présent,Protein kinase inhibitors,Oncologie,Comprimé
+TASIGNA,Nilotinib,L01EA03,2000 EUR,Expensive.,Présent,Protein kinase inhibitors,Oncologie,Gélule
+AFINITOR,Everolimus,L04AH02,500 EUR,Under review.,Présent,Inhibiteurs de mTOR,Immunosupresseur,Comprimé
+ARAVA,Léflunomide,L04AK01,150 EUR,,Présent,Alkylating agents,Immunosupresseur,Comprimé
+TERIFLUNO,Tériflunomide,L04AK02,250 EUR,New Entry.,Hors nomenclature,Alkylating agents,Immunosupresseur,Comprimé
+PIMECROLIMUS CR,Pimecrolimus,D11AH02,50 EUR,Topical use.,Hors nomenclature,Autres,Cytostatiques,Crème
+SYRUP METHADONE 5,Methadone,N07BC02,10 EUR,,Présent,Autres,Antalgiques,Syrup
+"""
+    
     try:
-        # Tenter de charger les données du fichier de classification
-        csv_snippet = """
-CLASSIFICATION DES IMMUNOSUPRESSEURS,,,,,,,,,,,,,,,
-N°,DCI,ATC Code,,DDD (OMS) ,Unité,NOM DE MARQUE,Laboratoire Fabricant,Nomenclature,Dosage,Forme,CLASSIFICATION,CODE ATC,ORIGINE,CLASSE OEB,INDICATION
-12,PIMECROLIMUS,D11AH02,,Pas de DDD assignée,Pas de DDD assignée,Hors Nomenclature,Hors Nomenclature,Hors Nomenclature,0.01,Crème,Antineoplasiques et immunomodulateurs,L04AX05,CHIMIQUE,OEB 4 ET 5,CYTOSTATIQUES
-16,Imatinib,L01EA01,PROTEIN KINASE INHIBITORS,0.4,g,CEMILIC / IMATIB 400,HIKMA PHARMA ALGERIA,Présent,,Gélule,Antineoplasiques et immunomodulateurs,L04AX05,CHIMIQUE,OEB 4 ET 5,CYTOSTATIQUES
-17,Imatinib,L01EA01,PROTEIN KINASE INHIBITORS,0.4,g,CEMILIC / IMATIB 401,HIKMA PHARMA ALGERIA,Présent,,Comprimé pelliculé,Antimétabolites et autres agents antiprolifératifs ,L04AX01 ,CHIMIQUE,OEB 4 ET 5,CYTOSTATIQUES
-18,Dasatinib,L01EA02,PROTEIN KINASE INHIBITORS,0.1,g,ELPIX,HIKMA PHARMA ALGERIA,Présent,,Comprimé pelliculé,Antimétabolites et autres agents antiprolifératifs ,L04AX01 ,CHIMIQUE,OEB 4 ET 5,CYTOSTATIQUES
-"""
-        # Utiliser les données brutes du second fichier pour une meilleure représentativité
-        # (Snippet 'all_pharma.xlsx - drugs.csv')
-        df_base_snippet = """
-scientific_name,Code_ATC,therapeutic_class,description,type,source,name,dosage,price,Observations
-Methadone syrup 5mg ,N07BC02,ANTALGIQUES ,,Syrup,,Methadone syrup 5mg ,5mg ,,""
-Dasatinib Comp/gles 100mg ,L01EA02,ONCOLOGIE,,Comprimé,HIKMA PHARMA ALGERIA,ELPIX,100mg,1000 EUR,""
-Nilotinib Comprimé 200mg,L01EA03,ONCOLOGIE,,Gélule,NOVARTIS PHARMA SCHWEIZ AG,TASIGNA,200mg,2000 EUR,""
-Everolimus Comprimé 10mg,L04AH02,IMMUNOSUPRESSEUR,,Comprimé,NOVARTIS PHARMA SCHWEIZ AG,AFINITOR,10 mg,500 EUR,""
-Léflunomide Comprimé 20mg,L04AK01,ALKYLATING AGENTS,Immunosupresseur,Comprimé,AVENTIS PHARMA S.A,ARAVA,20 mg,150 EUR,""
-Tériflunomide Comprimé 14mg,L04AK02,ALKYLATING AGENTS,Immunosupresseur,Comprimé,,,14 mg,250 EUR,""
-Pimecrolimus Crème 1%,D11AH02,CYTOSTATIQUES,Immunosupresseur,Crème,Hors Nomenclature,Hors Nomenclature,0.01,50 EUR,""
-"""
-        # Crée un DataFrame en utilisant les colonnes du second fichier pour Products
-        df_base = pd.read_csv(StringIO(df_base_snippet), sep=',')
+        # Lire l'extrait CSV en utilisant StringIO
+        df_base = pd.read_csv(StringIO(df_data_snippet))
         
-        # Le Dashboard a besoin des colonnes : Nomenclature, Classification, Indication, Forme
-        # Ajoutons ces colonnes (simulées pour l'exemple, mais nécessaires pour éviter les erreurs)
-        # En réalité, il faudrait un merge avec le fichier CLASSIFICATION ou s'assurer que ces colonnes
-        # sont dans le fichier "all_pharma.xlsx" original.
-        df_base['Nomenclature'] = ['Présent', 'Présent', 'Présent', 'Présent', 'Présent', 'Hors nomenclature', 'Hors nomenclature']
-        df_base['Classification Groupée'] = ['Autres', 'Protein kinase inhibitors', 'Protein kinase inhibitors', 'Inhibiteurs de mTOR', 'Alkylating agents', 'Alkylating agents', 'Autres']
-        df_base['Indication'] = ['ANTALGIQUES', 'Oncologie', 'Oncologie', 'Immunosupresseur', 'Immunosupresseur', 'Immunosupresseur', 'Cytostatiques']
-        df_base['Forme Galénique'] = ['Syrup', 'Comprimé', 'Gélule', 'Comprimé', 'Comprimé', 'Comprimé', 'Crème']
-        
-        # Renommer les colonnes de la base pour correspondre aux attentes (et à la logique Streamlit)
-        df_base = df_base.rename(columns={
-            'name': 'name',
-            'scientific_name': 'scientific_name',
-            'Code_ATC': 'Code ATC',
-            'type': 'type', # Type (forme galénique si pas de 'Forme Galénique' plus tard)
-            'price': 'price',
-            'Observations': 'Observations'
-        })
+        # S'assurer que les colonnes ont le bon type (pour les colonnes de prix/numériques)
+        df_base['price_numeric'] = df_base['price'].apply(lambda x: float(str(x).replace(' EUR', '').replace(',', '.')) if x else 0)
         
         conn = sqlite3.connect(db_path)
         df_base.to_sql('drugs', conn, if_exists='replace', index=False)
@@ -186,7 +155,7 @@ Pimecrolimus Crème 1%,D11AH02,CYTOSTATIQUES,Immunosupresseur,Crème,Hors Nomenc
         conn.commit()
 
     except Exception as e:
-        # Cette erreur ne devrait pas se produire dans l'immersive car les données sont en dur
+        # Afficher l'erreur fatale seulement si la base de données ne peut pas être créée
         st.error(f"FATAL: Database initialization error: {e}")
         
     finally:
@@ -206,16 +175,12 @@ def load_data():
         # Charger TOUTES les colonnes disponibles
         df = pd.read_sql_query("SELECT * FROM drugs", conn)
         
-        # Normalisation des noms de colonnes pour les pages Products et Dashboard
-        if 'scientific_name' in df.columns:
-            df = df.rename(columns={'scientific_name': 'scientific_name'}) # Assurer le nommage cohérent
-        if 'Code_ATC' in df.columns:
-             df = df.rename(columns={'Code_ATC': 'Code ATC'}) # Assurer le nommage cohérent
-        
         # Remplacer les NaN/None dans les colonnes de recherche/affichage par des chaînes vides
         df = df.fillna('')
         
     except Exception as e:
+        # L'erreur de base de données initiale devrait maintenant être corrigée, mais nous gardons
+        # ce bloc pour la robustesse future.
         st.error(f"❌ Database error on loading: {e}. Cannot run app without data.")
         # Créer un DataFrame minimal si la DB est inaccessible
         df = pd.DataFrame({
@@ -234,12 +199,6 @@ def load_data():
         if conn:
             conn.close()
     return df
-
-# La fonction ensure_observation_column n'est plus strictement nécessaire car
-# la création/remplacement de la table `drugs` garantit sa présence,
-# mais on la conserve si jamais elle était nécessaire pour une DB préexistante
-# def ensure_observation_column(): ...
-# ensure_observation_column()
 
 
 # ---------------------------
@@ -321,7 +280,9 @@ with main_col:
                     st.write(f"**Scientific name:** {row.get('scientific_name', 'N/A')}")
                     st.write(f"**Code ATC:** {row.get('Code ATC', 'N/A')}")
                     st.write(f"**Indication/Class:** {row.get('Indication', row.get('therapeutic_class', 'N/A'))}")
-                    st.write(f"**Forme Galénique:** {row.get('Forme Galénique', row.get('type', 'N/A'))}")
+                    # Utiliser 'Forme Galénique' si disponible, sinon 'type' (comme défini dans la DB)
+                    form_display = row.get('Forme Galénique', row.get('type', 'N/A'))
+                    st.write(f"**Forme Galénique:** {form_display}")
                     st.write(f"**Price:** {row.get('price', 'N/A')}")
                     obs_text = row.get("Observations", "")
                     st.markdown("**🩺 Observation:**")
@@ -335,19 +296,12 @@ with main_col:
         st.header("📊 Global Analysis")
         df = load_data()
         
-        if df.empty or 'Nomenclature' not in df.columns:
+        # Vérification des colonnes critiques après chargement
+        required_cols = ['Nomenclature', 'Classification Groupée', 'Indication', 'Forme Galénique']
+        if df.empty or not all(col in df.columns for col in required_cols):
             st.error("Data required for the Dashboard (Nomenclature, Classification Groupée, Indication, Forme Galénique) is missing or incomplete.")
             st.stop()
             
-        # Helper pour extraire le prix numérique (non utilisé pour les graphiques actuels)
-        def safe_extract(val):
-            try:
-                # Extrait le premier nombre flottant (supporte les virgules comme séparateur décimal)
-                match = re.search(r"[\d]+[.,]?[\d]*", str(val))
-                return float(match.group().replace(",", ".")) if match else None
-            except Exception:
-                return None
-                
         # --- Fonction réelle de chargement et calcul des données pour le tableau de bord ---
         @st.cache_data
         def calculate_dashboard_data(df_products):
@@ -540,10 +494,12 @@ with main_col:
                 conn = None
                 try:
                     conn = sqlite3.connect(db_path)
+                    # 1. Insertion dans la table des observations
                     conn.execute(
                         "INSERT INTO observations (product_name, type, comment) VALUES (?, ?, ?)",
                         (product, obs_type, comment)
                     )
+                    # 2. Mise à jour de la colonne 'Observations' dans la table 'drugs'
                     conn.execute(
                         "UPDATE drugs SET Observations = ? WHERE name = ?",
                         (comment, product)
