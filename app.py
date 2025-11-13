@@ -322,7 +322,7 @@ with main_col:
                     else:
                         st.write("_No observation recorded for this product._")
 
-    # DASHBOARD
+     # DASHBOARD
     elif menu == "📊 Dashboard":
         st.header("📊 Global Analysis")
         df = load_data()
@@ -337,7 +337,7 @@ with main_col:
             df['price_numeric'] = pd.NA
             st.warning("Column 'price' not found. Price analysis is skipped.")
     
-        # --- Critical Required Columns for Analysis ---
+        # --- Critical Required Columns for Analysis (ATC Code removed) ---
         required_cols = ['therapeutic_class', 'type', 'source', 'price_numeric']
         
         # Verification of critical columns after loading
@@ -357,23 +357,26 @@ with main_col:
         # --- Actual Data Loading and Calculation Function for the Dashboard ---
         @st.cache_data
         def calculate_dashboard_data(df_products):
-            """Calculates summary DataFrames from the complete data."""
+            """Calculates summary DataFrames from the complete data (ATC analysis removed)."""
             
             # 1. Distribution by Therapeutic Class (Uses 'therapeutic_class')
             df_class_therapy = df_products.groupby('therapeutic_class', dropna=True)['name'].count().reset_index()
             df_class_therapy.columns = ['Therapeutic Class', 'Number of Molecules']
             
-            # 3. Distribution by Type (Closest Galenic Form)
+            # 2. Distribution by Type (Closest Galenic Form)
+            # Renumbered from 3
             df_type = df_products.groupby('type', dropna=True)['name'].count().reset_index()
             df_type.columns = ['Form Type (Galenic)', 'Number of Molecules']
             df_type = df_type.sort_values(by='Number of Molecules', ascending=False)
             
-            # 4. Distribution by Source (Manufacturer/Data Source)
+            # 3. Distribution by Source (Manufacturer/Data Source)
+            # Renumbered from 4
             df_source = df_products.groupby('source', dropna=True)['name'].count().reset_index()
             df_source.columns = ['Source (Manufacturer/Data)', 'Number of Molecules']
             df_source = df_source.sort_values(by='Number of Molecules', ascending=False)
             
-            # 5. Average Price by Therapeutic Class (Uses 'therapeutic_class' and 'price_numeric')
+            # 4. Average Price by Therapeutic Class (Uses 'therapeutic_class' and 'price_numeric')
+            # Renumbered from 5
             # Exclude NaNs in 'price_numeric' for calculation
             df_price_class = df_products[df_products['price_numeric'].notna()].groupby('therapeutic_class').agg(
                 Average_Price=('price_numeric', 'mean'),
@@ -381,9 +384,10 @@ with main_col:
             ).reset_index()
             df_price_class.columns = ['Therapeutic Class', 'Average_Price', 'Total_Molecules']
             
-            return df_class_therapy, df_atc_grouped, df_type, df_source, df_price_class
+            # Return only the four remaining dataframes
+            return df_class_therapy, df_type, df_source, df_price_class
     
-        # --- Plotly Chart Creation Functions (Modified to use English labels) ---
+        # --- Plotly Chart Creation Functions (No changes needed here as they are generic) ---
         PLOTLY_TEMPLATE = "streamlit"
     
         def create_pie_chart(df, names_col, values_col, title):
@@ -395,14 +399,14 @@ with main_col:
                 names=names_col,
                 values=values_col,
                 title=title,
-                hole=0.2,
+                hole=0.3,
                 color_discrete_sequence=px.colors.qualitative.Pastel,
                 template=PLOTLY_TEMPLATE
             )
             fig.update_layout(
                 showlegend=True,
-                margin=dict(l=10, r=10, t=40, b=10),
-                height=300,
+                margin=dict(l=20, r=20, t=50, b=20),
+                height=400,
             )
             fig.update_traces(
                 textinfo='percent+label',  
@@ -463,7 +467,7 @@ with main_col:
         
         # --- Dashboard Section ---
         
-        # Load actual dashboard data
+        # Load actual dashboard data (ATC grouped result removed)
         df_class_therapy, df_type, df_source, df_price_class = calculate_dashboard_data(df)
         
         # Report Title
@@ -492,10 +496,10 @@ with main_col:
         st.markdown("---") # Visual separator
         
         # ----------------------------------------------------
-        # Section 3: Chart 3 - Form Type Distribution
+        # Section 2: Chart 2 - Form Type Distribution (Renumbered from 3)
         # ----------------------------------------------------
     
-        st.markdown("<h2>3. Top 10 Form Type (Galenic) Distributions</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>2. Top 10 Form Type (Galenic) Distributions</h2>", unsafe_allow_html=True)
     
         with st.container():
             fig_type = create_bar_chart(
@@ -513,10 +517,10 @@ with main_col:
         st.markdown("---") # Visual separator
     
         # ----------------------------------------------------
-        # Section 4: Chart 4 - Source Distribution (Manufacturer)
+        # Section 3: Chart 3 - Source Distribution (Manufacturer) (Renumbered from 4)
         # ----------------------------------------------------
     
-        st.markdown("<h2>4. Top 10 Source (Manufacturer/Data) Distributions</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>3. Top 10 Source (Manufacturer/Data) Distributions</h2>", unsafe_allow_html=True)
         
         with st.container():
             fig_source = create_bar_chart(
@@ -534,10 +538,10 @@ with main_col:
         st.markdown("---") # Visual separator
         
         # ----------------------------------------------------
-        # Section 5: Chart 5 - Average Price by Therapeutic Class
+        # Section 4: Chart 4 - Average Price by Therapeutic Class (Renumbered from 5)
         # ----------------------------------------------------
         
-        st.markdown("<h2>5. Average Price by Therapeutic Class</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>4. Average Price by Therapeutic Class</h2>", unsafe_allow_html=True)
         
         with st.container():
             fig_price = create_price_bar_chart(
@@ -652,6 +656,7 @@ with main_col:
                 date_display = row['date'][:19].replace('-', '/').replace(' ', ' - ')
                 with st.expander(f"{row['product_name']} ({row['type']}) - **{date_display}**"):
                     st.write(row["comment"])
+
 
 
 
