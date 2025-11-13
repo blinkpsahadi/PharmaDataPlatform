@@ -338,8 +338,6 @@ with main_col:
             st.warning("Column 'price' not found. Price analysis is skipped.")
     
         # --- Nouveaux En-têtes Critiques pour l'Analyse ---
-        # Nous utilisons 'therapeutic_class', 'Code_ATC', 'type' (pour Forme Galénique), 
-        # 'source' (pour Indication/Fabricant) et 'price_numeric' (calculé).
         required_cols = ['therapeutic_class', 'Code_ATC', 'type', 'source', 'price_numeric']
         
         # Vérification des colonnes critiques après chargement
@@ -482,11 +480,6 @@ with main_col:
         # --- Section Tableau de Bord ---
         
         # Charger les données réelles du tableau de bord
-        # df_class_therapy remplace df_nom
-        # df_atc_grouped remplace df_class
-        # df_type remplace df_ind
-        # df_source remplace df_forme
-        # df_price_class est mis à jour
         df_class_therapy, df_atc_grouped, df_type, df_source, df_price_class = calculate_dashboard_data(df)
         
         # Titre du rapport
@@ -495,84 +488,94 @@ with main_col:
         
         
         # ----------------------------------------------------
-        # Section 1: Distribution par Classe Thérapeutique et Code ATC (Grid 2 colonnes)
+        # Section 1: Graphique 1 - Distribution par Classe Thérapeutique
         # ----------------------------------------------------
         
-        st.markdown("<h2>Distribution par Classe Thérapeutique et Code ATC</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>1. Distribution par Classe Thérapeutique</h2>", unsafe_allow_html=True)
         
-        col1, col2 = st.columns(2)
+        with st.container(): # Utilisation d'un conteneur pour assurer la pleine largeur
+            fig_class_therapy = create_pie_chart(
+                df_class_therapy, 
+                names_col='Classe Thérapeutique',
+                values_col='Nombre de Molécules',
+                title="Distribution par Classe Thérapeutique"
+            )
+            if fig_class_therapy:
+                st.plotly_chart(fig_class_therapy, use_container_width=True)
+            else:
+                st.info("No data for therapeutic class distribution.")
         
-        # Graphique 1: Distribution par Classe Thérapeutique (Pie Chart - Remplaçant Nomenclature)
-        with col1:
-            with st.container(): 
-                fig_class_therapy = create_pie_chart(
-                    df_class_therapy, 
-                    names_col='Classe Thérapeutique',
-                    values_col='Nombre de Molécules',
-                    title="Distribution par Classe Thérapeutique"
-                )
-                if fig_class_therapy:
-                    st.plotly_chart(fig_class_therapy, use_container_width=True)
-                else:
-                    st.info("No data for therapeutic class distribution.")
-        
-        # Graphique 2: Distribution par Code ATC (Bar Chart - Remplaçant Classification Groupée)
-        with col2:
-            with st.container(): 
-                fig_atc = create_bar_chart(
-                    df_atc_grouped, 
-                    x_col='Code ATC Groupé', 
-                    y_col='Nombre de Molécules', 
-                    color_col='Code ATC Groupé', 
-                    title="Distribution par Code ATC Groupé (Top N)"
-                )
-                if fig_atc:
-                    st.plotly_chart(fig_atc, use_container_width=True)
-                else:
-                    st.info("No data for ATC code distribution.")
-        
+        st.markdown("---") # Séparateur visuel
         
         # ----------------------------------------------------
-        # Section 2: Détail par Type de Forme et Source (Fabricant)
+        # Section 2: Graphique 2 - Distribution par Code ATC
         # ----------------------------------------------------
         
-        st.markdown("<h2>Détail par Forme Galénique et Source</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>2. Distribution par Code ATC</h2>", unsafe_allow_html=True)
+    
+        with st.container():
+            fig_atc = create_bar_chart(
+                df_atc_grouped, 
+                x_col='Code ATC Groupé', 
+                y_col='Nombre de Molécules', 
+                color_col='Code ATC Groupé', 
+                title="Distribution par Code ATC Groupé (Top N)"
+            )
+            if fig_atc:
+                st.plotly_chart(fig_atc, use_container_width=True)
+            else:
+                st.info("No data for ATC code distribution.")
+    
+        st.markdown("---") # Séparateur visuel
+    
+        # ----------------------------------------------------
+        # Section 3: Graphique 3 - Distribution par Type de Forme
+        # ----------------------------------------------------
+    
+        st.markdown("<h2>3. Top 10 Distributions par Type de Forme (Galénique)</h2>", unsafe_allow_html=True)
+    
+        with st.container():
+            fig_type = create_bar_chart(
+                df_type.head(10), # Limité au top 10 pour la lisibilité
+                x_col='Type de Forme (Galénique)', 
+                y_col='Nombre de Molécules', 
+                color_col='Type de Forme (Galénique)', 
+                title="Top 10 Distributions par Type de Forme"
+            )
+            if fig_type:
+                st.plotly_chart(fig_type, use_container_width=True)
+            else:
+                st.info("No data for Type (Forme Galénique) distribution.")
+    
+        st.markdown("---") # Séparateur visuel
+    
+        # ----------------------------------------------------
+        # Section 4: Graphique 4 - Distribution par Source (Fabricant)
+        # ----------------------------------------------------
+    
+        st.markdown("<h2>4. Top 10 Distributions par Source (Fabricant/Données)</h2>", unsafe_allow_html=True)
         
-        col3, col4 = st.columns(2)
+        with st.container():
+            fig_source = create_bar_chart(
+                df_source.head(10), # Limité au top 10 pour la lisibilité
+                x_col='Source (Fabricant/Données)', 
+                y_col='Nombre de Molécules', 
+                color_col='Source (Fabricant/Données)', 
+                title="Top 10 Distributions par Source"
+            )
+            if fig_source:
+                st.plotly_chart(fig_source, use_container_width=True)
+            else:
+                st.info("No data for Source distribution.")
+    
+        st.markdown("---") # Séparateur visuel
         
-        # Graphique 3: Distribution par Type de Forme (Bar Chart - Remplaçant Indication)
-        with col3:
-            with st.container(): 
-                fig_type = create_bar_chart(
-                    df_type.head(10), # Limité au top 10 pour la lisibilité
-                    x_col='Type de Forme (Galénique)', 
-                    y_col='Nombre de Molécules', 
-                    color_col='Type de Forme (Galénique)', 
-                    title="Top 10 Distributions par Type de Forme"
-                )
-                if fig_type:
-                    st.plotly_chart(fig_type, use_container_width=True)
-                else:
-                    st.info("No data for Type (Forme Galénique) distribution.")
+        # ----------------------------------------------------
+        # Section 5: Graphique 5 - Prix Moyen par Classe Thérapeutique
+        # ----------------------------------------------------
         
-        # Graphique 4: Distribution par Source (Bar Chart - Remplaçant Forme Galénique)
-        with col4:
-            with st.container(): 
-                fig_source = create_bar_chart(
-                    df_source.head(10), # Limité au top 10 pour la lisibilité
-                    x_col='Source (Fabricant/Données)', 
-                    y_col='Nombre de Molécules', 
-                    color_col='Source (Fabricant/Données)', 
-                    title="Top 10 Distributions par Source"
-                )
-                if fig_source:
-                    st.plotly_chart(fig_source, use_container_width=True)
-                else:
-                    st.info("No data for Source distribution.")
+        st.markdown("<h2>5. Prix Moyen par Classe Thérapeutique</h2>", unsafe_allow_html=True)
         
-        st.markdown("---")
-        
-        # Graphique 5: Prix Moyen par Classe Thérapeutique (Utilise toute la largeur)
         with st.container():
             fig_price = create_price_bar_chart(
                 df_price_class.sort_values(by='Moyenne_Prix', ascending=False),
@@ -584,7 +587,6 @@ with main_col:
                 st.plotly_chart(fig_price, use_container_width=True)
             else:
                 st.info("No numerical price data available for price analysis.")
-
     # OBSERVATIONS
     elif menu == "🧾 Observations":
         st.header("🩺 Commercial & Medical Observations")
@@ -687,6 +689,7 @@ with main_col:
                 date_display = row['date'][:19].replace('-', '/').replace(' ', ' - ')
                 with st.expander(f"{row['product_name']} ({row['type']}) - **{date_display}**"):
                     st.write(row["comment"])
+
 
 
 
