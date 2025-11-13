@@ -363,22 +363,6 @@ with main_col:
             df_class_therapy = df_products.groupby('therapeutic_class', dropna=True)['name'].count().reset_index()
             df_class_therapy.columns = ['Therapeutic Class', 'Number of Molecules']
             
-            # 2. Distribution by ATC Code (Top 5 + Others)
-            counts_atc = df_products.groupby('Code_ATC', dropna=True)['name'].count()
-            top_n = 5 # Show more ATC for better granularity
-            
-            if len(counts_atc) > top_n:
-                top_classes = counts_atc.nlargest(top_n).index.tolist()
-                # Rename the column temporarily for grouping
-                df_products['Code_ATC_Grouped'] = df_products['Code_ATC'].apply(
-                    lambda x: x if x in top_classes else 'Other ATC Codes' if pd.notna(x) else 'Unknown'
-                )
-                df_atc_grouped = df_products.groupby('Code_ATC_Grouped')['name'].count().reset_index()
-                df_atc_grouped.columns = ['Grouped ATC Code', 'Number of Molecules']
-            else:
-                df_atc_grouped = counts_atc.reset_index()
-                df_atc_grouped.columns = ['Grouped ATC Code', 'Number of Molecules']
-            
             # 3. Distribution by Type (Closest Galenic Form)
             df_type = df_products.groupby('type', dropna=True)['name'].count().reset_index()
             df_type.columns = ['Form Type (Galenic)', 'Number of Molecules']
@@ -689,6 +673,7 @@ with main_col:
                 date_display = row['date'][:19].replace('-', '/').replace(' ', ' - ')
                 with st.expander(f"{row['product_name']} ({row['type']}) - **{date_display}**"):
                     st.write(row["comment"])
+
 
 
 
