@@ -338,7 +338,7 @@ with main_col:
             st.warning("Column 'price' not found. Price analysis is skipped.")
     
         # --- Critical Required Columns for Analysis ---
-        required_cols = ['therapeutic_class', 'Code_ATC', 'type', 'source', 'price_numeric']
+        required_cols = ['therapeutic_class', 'type', 'source', 'price_numeric']
         
         # Verification of critical columns after loading
         for col in required_cols:
@@ -395,14 +395,14 @@ with main_col:
                 names=names_col,
                 values=values_col,
                 title=title,
-                hole=0.3,
+                hole=0.2,
                 color_discrete_sequence=px.colors.qualitative.Pastel,
                 template=PLOTLY_TEMPLATE
             )
             fig.update_layout(
                 showlegend=True,
-                margin=dict(l=20, r=20, t=50, b=20),
-                height=400,
+                margin=dict(l=10, r=10, t=40, b=10),
+                height=300,
             )
             fig.update_traces(
                 textinfo='percent+label',  
@@ -464,7 +464,7 @@ with main_col:
         # --- Dashboard Section ---
         
         # Load actual dashboard data
-        df_class_therapy, df_atc_grouped, df_type, df_source, df_price_class = calculate_dashboard_data(df)
+        df_class_therapy, df_type, df_source, df_price_class = calculate_dashboard_data(df)
         
         # Report Title
         st.markdown("<h1>General Pharmaceutical Data Synthesis</h1>", unsafe_allow_html=True)
@@ -491,27 +491,6 @@ with main_col:
         
         st.markdown("---") # Visual separator
         
-        # ----------------------------------------------------
-        # Section 2: Chart 2 - ATC Code Distribution
-        # ----------------------------------------------------
-        
-        st.markdown("<h2>2. ATC Code Distribution</h2>", unsafe_allow_html=True)
-    
-        with st.container():
-            fig_atc = create_bar_chart(
-                df_atc_grouped, 
-                x_col='Grouped ATC Code', 
-                y_col='Number of Molecules', 
-                color_col='Grouped ATC Code', 
-                title="Distribution by Grouped ATC Code (Top N)"
-            )
-            if fig_atc:
-                st.plotly_chart(fig_atc, use_container_width=True)
-            else:
-                st.info("No data for ATC code distribution.")
-    
-        st.markdown("---") # Visual separator
-    
         # ----------------------------------------------------
         # Section 3: Chart 3 - Form Type Distribution
         # ----------------------------------------------------
@@ -673,6 +652,7 @@ with main_col:
                 date_display = row['date'][:19].replace('-', '/').replace(' ', ' - ')
                 with st.expander(f"{row['product_name']} ({row['type']}) - **{date_display}**"):
                     st.write(row["comment"])
+
 
 
 
