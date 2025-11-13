@@ -327,22 +327,22 @@ with main_col:
         st.header("📊 Global Analysis")
         df = load_data()
         
-        # --- Préparation des Données: Nettoyage et Création de 'price_numeric' ---
-        # La colonne 'price' est souvent une chaîne de caractères (parfois avec des virgules comme décimales).
+        # --- Data Preparation: Cleaning and Creating 'price_numeric' ---
+        # The 'price' column is often a string (sometimes with commas as decimals).
         if 'price' in df.columns:
-            # Remplacer les virgules par des points et convertir en numérique
+            # Replace commas with dots and convert to numeric
             df['price_numeric'] = df['price'].astype(str).str.replace(',', '.', regex=False)
             df['price_numeric'] = pd.to_numeric(df['price_numeric'], errors='coerce')
         else:
             df['price_numeric'] = pd.NA
             st.warning("Column 'price' not found. Price analysis is skipped.")
     
-        # --- Nouveaux En-têtes Critiques pour l'Analyse ---
+        # --- Critical Required Columns for Analysis ---
         required_cols = ['therapeutic_class', 'Code_ATC', 'type', 'source', 'price_numeric']
         
-        # Vérification des colonnes critiques après chargement
+        # Verification of critical columns after loading
         for col in required_cols:
-            # Note: 'price_numeric' est créé ci-dessus, donc nous vérifions si l'originale existe
+            # Note: 'price_numeric' is created above, so we check if the original exists
             if col in ['price_numeric']:
                 continue 
             
@@ -354,56 +354,56 @@ with main_col:
             st.error("Data required for the Dashboard is missing or empty.")
             st.stop()
             
-        # --- Fonction réelle de chargement et calcul des données pour le tableau de bord ---
+        # --- Actual Data Loading and Calculation Function for the Dashboard ---
         @st.cache_data
         def calculate_dashboard_data(df_products):
-            """Calcule les DataFrames de synthèse à partir des données complètes."""
+            """Calculates summary DataFrames from the complete data."""
             
-            # 1. Distribution par Classe Thérapeutique (Utilise 'therapeutic_class')
+            # 1. Distribution by Therapeutic Class (Uses 'therapeutic_class')
             df_class_therapy = df_products.groupby('therapeutic_class', dropna=True)['name'].count().reset_index()
-            df_class_therapy.columns = ['Classe Thérapeutique', 'Nombre de Molécules']
+            df_class_therapy.columns = ['Therapeutic Class', 'Number of Molecules']
             
-            # 2. Distribution par Code ATC (Top 3 + Autres)
+            # 2. Distribution by ATC Code (Top 5 + Others)
             counts_atc = df_products.groupby('Code_ATC', dropna=True)['name'].count()
-            top_n = 5 # Montrer plus d'ATC pour une meilleure granularité
+            top_n = 5 # Show more ATC for better granularity
             
             if len(counts_atc) > top_n:
                 top_classes = counts_atc.nlargest(top_n).index.tolist()
-                # Renommer la colonne temporairement pour le regroupement
+                # Rename the column temporarily for grouping
                 df_products['Code_ATC_Grouped'] = df_products['Code_ATC'].apply(
-                    lambda x: x if x in top_classes else 'Autres Codes ATC' if pd.notna(x) else 'Inconnu'
+                    lambda x: x if x in top_classes else 'Other ATC Codes' if pd.notna(x) else 'Unknown'
                 )
                 df_atc_grouped = df_products.groupby('Code_ATC_Grouped')['name'].count().reset_index()
-                df_atc_grouped.columns = ['Code ATC Groupé', 'Nombre de Molécules']
+                df_atc_grouped.columns = ['Grouped ATC Code', 'Number of Molecules']
             else:
                 df_atc_grouped = counts_atc.reset_index()
-                df_atc_grouped.columns = ['Code ATC Groupé', 'Nombre de Molécules']
+                df_atc_grouped.columns = ['Grouped ATC Code', 'Number of Molecules']
             
-            # 3. Distribution par Type (Forme Galénique la plus proche)
+            # 3. Distribution by Type (Closest Galenic Form)
             df_type = df_products.groupby('type', dropna=True)['name'].count().reset_index()
-            df_type.columns = ['Type de Forme (Galénique)', 'Nombre de Molécules']
-            df_type = df_type.sort_values(by='Nombre de Molécules', ascending=False)
+            df_type.columns = ['Form Type (Galenic)', 'Number of Molecules']
+            df_type = df_type.sort_values(by='Number of Molecules', ascending=False)
             
-            # 4. Distribution par Source (Fabricant/Source de Données)
+            # 4. Distribution by Source (Manufacturer/Data Source)
             df_source = df_products.groupby('source', dropna=True)['name'].count().reset_index()
-            df_source.columns = ['Source (Fabricant/Données)', 'Nombre de Molécules']
-            df_source = df_source.sort_values(by='Nombre de Molécules', ascending=False)
+            df_source.columns = ['Source (Manufacturer/Data)', 'Number of Molecules']
+            df_source = df_source.sort_values(by='Number of Molecules', ascending=False)
             
-            # 5. Prix moyen par Classe Thérapeutique (Utilise 'therapeutic_class' et 'price_numeric')
-            # Exclure les NaNs dans 'price_numeric' pour le calcul
+            # 5. Average Price by Therapeutic Class (Uses 'therapeutic_class' and 'price_numeric')
+            # Exclude NaNs in 'price_numeric' for calculation
             df_price_class = df_products[df_products['price_numeric'].notna()].groupby('therapeutic_class').agg(
-                Moyenne_Prix=('price_numeric', 'mean'),
-                Total_Molécules=('name', 'count')
+                Average_Price=('price_numeric', 'mean'),
+                Total_Molecules=('name', 'count')
             ).reset_index()
-            df_price_class.columns = ['Classe Thérapeutique', 'Moyenne_Prix', 'Total_Molécules']
+            df_price_class.columns = ['Therapeutic Class', 'Average_Price', 'Total_Molecules']
             
             return df_class_therapy, df_atc_grouped, df_type, df_source, df_price_class
     
-        # --- Fonctions de création de graphiques Plotly (Inchagées car génériques) ---
+        # --- Plotly Chart Creation Functions (Modified to use English labels) ---
         PLOTLY_TEMPLATE = "streamlit"
     
         def create_pie_chart(df, names_col, values_col, title):
-            """Crée un diagramme circulaire (Pie Chart) Plotly Express."""
+            """Creates a Plotly Express Pie Chart."""
             if df.empty:
                 return None
             fig = px.pie(
@@ -426,8 +426,8 @@ with main_col:
             )
             return fig
         
-        def create_bar_chart(df, x_col, y_col, color_col, title, y_title="Nombre de Molécules"):
-            """Crée un diagramme à barres Plotly Express."""
+        def create_bar_chart(df, x_col, y_col, color_col, title, y_title="Number of Molecules"):
+            """Creates a Plotly Express Bar Chart."""
             if df.empty:
                 return None
             fig = px.bar(
@@ -447,13 +447,13 @@ with main_col:
                 margin=dict(l=20, r=20, t=50, b=20),
                 height=400,
             )
-            # Optimisation de la rotation des étiquettes si elles sont trop longues
+            # Optimisation of label rotation if they are too long
             fig.update_xaxes(tickangle=45, tickfont=dict(size=10)) 
             
             return fig
         
         def create_price_bar_chart(df, x_col, y_col, title):
-            """Crée un diagramme à barres pour le prix moyen."""
+            """Creates a bar chart for the average price."""
             if df.empty:
                 return None
             fig = px.bar(
@@ -462,13 +462,13 @@ with main_col:
                 y=y_col,
                 color=x_col,
                 title=title,
-                text_auto='.2s', # Afficher la valeur avec 2 décimales si possible
+                text_auto='.2s', # Display value with 2 decimals if possible
                 color_discrete_sequence=px.colors.qualitative.Safe,
                 template=PLOTLY_TEMPLATE
             )
             fig.update_layout(
                 xaxis_title=x_col,
-                yaxis_title="Prix Moyen", # Unité non précisée, mais on suppose un prix
+                yaxis_title="Average Price", # Unit not specified, but assumed to be a price
                 showlegend=False,
                 margin=dict(l=20, r=20, t=50, b=20),
                 height=400,
@@ -477,111 +477,111 @@ with main_col:
             return fig
     
         
-        # --- Section Tableau de Bord ---
+        # --- Dashboard Section ---
         
-        # Charger les données réelles du tableau de bord
+        # Load actual dashboard data
         df_class_therapy, df_atc_grouped, df_type, df_source, df_price_class = calculate_dashboard_data(df)
         
-        # Titre du rapport
-        st.markdown("<h1>Synthèse des Données Pharmaceutiques Générales</h1>", unsafe_allow_html=True)
-        st.write(f"Analyse des **{len(df)}** molécules au **{date.today().strftime('%d/%m/%Y')}**.")
+        # Report Title
+        st.markdown("<h1>General Pharmaceutical Data Synthesis</h1>", unsafe_allow_html=True)
+        st.write(f"Analysis of **{len(df)}** molecules as of **{date.today().strftime('%m/%d/%Y')}**.")
         
         
         # ----------------------------------------------------
-        # Section 1: Graphique 1 - Distribution par Classe Thérapeutique
+        # Section 1: Chart 1 - Therapeutic Class Distribution
         # ----------------------------------------------------
         
-        st.markdown("<h2>1. Distribution par Classe Thérapeutique</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>1. Therapeutic Class Distribution</h2>", unsafe_allow_html=True)
         
-        with st.container(): # Utilisation d'un conteneur pour assurer la pleine largeur
+        with st.container(): # Use a container to ensure full width
             fig_class_therapy = create_pie_chart(
                 df_class_therapy, 
-                names_col='Classe Thérapeutique',
-                values_col='Nombre de Molécules',
-                title="Distribution par Classe Thérapeutique"
+                names_col='Therapeutic Class',
+                values_col='Number of Molecules',
+                title="Distribution by Therapeutic Class"
             )
             if fig_class_therapy:
                 st.plotly_chart(fig_class_therapy, use_container_width=True)
             else:
                 st.info("No data for therapeutic class distribution.")
         
-        st.markdown("---") # Séparateur visuel
+        st.markdown("---") # Visual separator
         
         # ----------------------------------------------------
-        # Section 2: Graphique 2 - Distribution par Code ATC
+        # Section 2: Chart 2 - ATC Code Distribution
         # ----------------------------------------------------
         
-        st.markdown("<h2>2. Distribution par Code ATC</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>2. ATC Code Distribution</h2>", unsafe_allow_html=True)
     
         with st.container():
             fig_atc = create_bar_chart(
                 df_atc_grouped, 
-                x_col='Code ATC Groupé', 
-                y_col='Nombre de Molécules', 
-                color_col='Code ATC Groupé', 
-                title="Distribution par Code ATC Groupé (Top N)"
+                x_col='Grouped ATC Code', 
+                y_col='Number of Molecules', 
+                color_col='Grouped ATC Code', 
+                title="Distribution by Grouped ATC Code (Top N)"
             )
             if fig_atc:
                 st.plotly_chart(fig_atc, use_container_width=True)
             else:
                 st.info("No data for ATC code distribution.")
     
-        st.markdown("---") # Séparateur visuel
+        st.markdown("---") # Visual separator
     
         # ----------------------------------------------------
-        # Section 3: Graphique 3 - Distribution par Type de Forme
+        # Section 3: Chart 3 - Form Type Distribution
         # ----------------------------------------------------
     
-        st.markdown("<h2>3. Top 10 Distributions par Type de Forme (Galénique)</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>3. Top 10 Form Type (Galenic) Distributions</h2>", unsafe_allow_html=True)
     
         with st.container():
             fig_type = create_bar_chart(
-                df_type.head(10), # Limité au top 10 pour la lisibilité
-                x_col='Type de Forme (Galénique)', 
-                y_col='Nombre de Molécules', 
-                color_col='Type de Forme (Galénique)', 
-                title="Top 10 Distributions par Type de Forme"
+                df_type.head(10), # Limited to top 10 for readability
+                x_col='Form Type (Galenic)', 
+                y_col='Number of Molecules', 
+                color_col='Form Type (Galenic)', 
+                title="Top 10 Distributions by Form Type"
             )
             if fig_type:
                 st.plotly_chart(fig_type, use_container_width=True)
             else:
-                st.info("No data for Type (Forme Galénique) distribution.")
+                st.info("No data for Form Type (Galenic) distribution.")
     
-        st.markdown("---") # Séparateur visuel
+        st.markdown("---") # Visual separator
     
         # ----------------------------------------------------
-        # Section 4: Graphique 4 - Distribution par Source (Fabricant)
+        # Section 4: Chart 4 - Source Distribution (Manufacturer)
         # ----------------------------------------------------
     
-        st.markdown("<h2>4. Top 10 Distributions par Source (Fabricant/Données)</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>4. Top 10 Source (Manufacturer/Data) Distributions</h2>", unsafe_allow_html=True)
         
         with st.container():
             fig_source = create_bar_chart(
-                df_source.head(10), # Limité au top 10 pour la lisibilité
-                x_col='Source (Fabricant/Données)', 
-                y_col='Nombre de Molécules', 
-                color_col='Source (Fabricant/Données)', 
-                title="Top 10 Distributions par Source"
+                df_source.head(10), # Limited to top 10 for readability
+                x_col='Source (Manufacturer/Data)', 
+                y_col='Number of Molecules', 
+                color_col='Source (Manufacturer/Data)', 
+                title="Top 10 Distributions by Source"
             )
             if fig_source:
                 st.plotly_chart(fig_source, use_container_width=True)
             else:
                 st.info("No data for Source distribution.")
     
-        st.markdown("---") # Séparateur visuel
+        st.markdown("---") # Visual separator
         
         # ----------------------------------------------------
-        # Section 5: Graphique 5 - Prix Moyen par Classe Thérapeutique
+        # Section 5: Chart 5 - Average Price by Therapeutic Class
         # ----------------------------------------------------
         
-        st.markdown("<h2>5. Prix Moyen par Classe Thérapeutique</h2>", unsafe_allow_html=True)
+        st.markdown("<h2>5. Average Price by Therapeutic Class</h2>", unsafe_allow_html=True)
         
         with st.container():
             fig_price = create_price_bar_chart(
-                df_price_class.sort_values(by='Moyenne_Prix', ascending=False),
-                x_col='Classe Thérapeutique',
-                y_col='Moyenne_Prix',
-                title="Prix Moyen par Classe Thérapeutique"
+                df_price_class.sort_values(by='Average_Price', ascending=False),
+                x_col='Therapeutic Class',
+                y_col='Average_Price',
+                title="Average Price by Therapeutic Class"
             )
             if fig_price:
                 st.plotly_chart(fig_price, use_container_width=True)
@@ -689,6 +689,7 @@ with main_col:
                 date_display = row['date'][:19].replace('-', '/').replace(' ', ' - ')
                 with st.expander(f"{row['product_name']} ({row['type']}) - **{date_display}**"):
                     st.write(row["comment"])
+
 
 
 
