@@ -82,9 +82,6 @@ if "username" not in st.session_state:
 # Load credentials from secrets or provide a safe default
 if "credentials" in st.secrets:
     USERS = dict(st.secrets["credentials"])
-else:
-    # Default placeholder user if secrets are not configured (development fallback)
-    USERS = {"admin": "adminpass"} 
 
 def check_password(username, password):
     """Checks if the provided username and password are valid."""
@@ -734,4 +731,5 @@ with main_col:
                 # Title uses type and date
                 with st.expander(f"**{row['product_name']}** ({row['type']}) - *{date_display}*"):
                     st.write(row["comment"])
+
 
