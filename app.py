@@ -254,16 +254,19 @@ with main_col:
     elif menu == "💊 Products":
         st.header("💊 List of Products")
         df = load_data()
-
-        search = st.text_input("🔍 Search by name or substance")
+    
+        # --- Search Input ---
+        search = st.text_input("🔍 Search by name, scientific name, or ATC code")
         
         filtered_df = df.copy()
         if search:
-            search_cols = ["name", "scientific_name", "Code ATC", "Classification Groupée", "Indication"]
+            # Columns used for filtering (name, scientific name, ATC code, and galenic form)
+            search_cols = ["name", "scientific_name", "Code_ATC", "type"] 
+            
             mask = False
             for c in search_cols:
                 if c in filtered_df.columns:
-                    # Utiliser .str.contains sur la colonne convertie en string
+                    # Use .str.contains on the column converted to string
                     mask |= filtered_df[c].astype(str).str.contains(search, case=False, na=False)
             
             if isinstance(mask, pd.Series):
@@ -271,26 +274,26 @@ with main_col:
             else:
                 st.warning("No searchable columns found in data.")
                 filtered_df = pd.DataFrame()
-
-        items_per_page = 10 # Réduit à 10 pour une meilleure pagination avec le petit jeu de données
-        # Gérer le cas où df est vide après la recherche
+    
+        items_per_page = 10 
         total_rows = len(filtered_df)
         total_pages = max(1, (total_rows - 1) // items_per_page + 1)
         
-        # S'assurer que la page actuelle est valide
+        # Ensure current page is valid
         if 'product_page' not in st.session_state:
             st.session_state.product_page = 1
         
         if total_rows == 0:
             st.info("No products found matching your criteria.")
         else:
-            # Mettre à jour la page si la page actuelle dépasse le nombre total de pages
+            # Update page if current page exceeds total pages
             if st.session_state.product_page > total_pages:
                 st.session_state.product_page = total_pages
                 
             col_page_input, col_page_text = st.columns([1, 3])
             
             with col_page_input:
+                # Page number input field
                 page = st.number_input("Page", min_value=1, max_value=total_pages, 
                                         value=st.session_state.product_page, step=1, 
                                         key="product_page_input", label_visibility="collapsed")
@@ -298,24 +301,33 @@ with main_col:
             with col_page_text:
                 st.markdown(f"**Page {page} of {total_pages}** ({total_rows} items total)")
             
-            st.session_state.product_page = page # Garder l'état
+            st.session_state.product_page = page # Keep state
             
             subset = filtered_df.iloc[(page - 1) * items_per_page : page * items_per_page]
-
+    
             for _, row in subset.iterrows():
-                # Utilise le nom scientifique si disponible, sinon le nom commercial dans le titre de l'expander
+                # Use scientific name if available, otherwise commercial name in the expander title
                 title_display = f"💊 {row['name']} ({row.get('scientific_name', 'N/A')})" if row.get('scientific_name') else f"💊 {row['name']}"
                 with st.expander(title_display):
-                    st.write(f"**Scientific name:** {row.get('scientific_name', 'N/A')}")
-                    st.write(f"**Code ATC:** {row.get('Code ATC', 'N/A')}")
-                    st.write(f"**Indication:** {row.get('Indication', 'N/A')}")
-                    st.write(f"**Classification Groupée:** {row.get('Classification Groupée', 'N/A')}")
-                    form_display = row.get('Forme Galénique', 'N/A')
-                    st.write(f"**Forme Galénique:** {form_display}")
-                    st.write(f"**Nomenclature Status:** {row.get('Nomenclature', 'N/A')}")
+                    
+                    # --- SIMPLIFIED DISPLAY AS REQUESTED (ATC, Galenic Form, Scientific Name, Price, Observations) ---
+                    
+                    # 1. ATC Code
+                    st.write(f"**ATC Code:** {row.get('Code_ATC', 'N/A')}") 
+                    
+                    # 2. Galenic Form (assuming the column is named 'type' in the CSV)
+                    form_display = row.get('type', 'N/A')
+                    st.write(f"**Galenic Form:** {form_display}")
+                    
+                    # 3. Scientific Name
+                    st.write(f"**Scientific Name:** {row.get('scientific_name', 'N/A')}")
+                    
+                    # 4. Price
                     st.write(f"**Price:** {row.get('price', 'N/A')}")
                     
+                    # 5. Latest Observation
                     obs_text = row.get("Observations", "")
+                    st.markdown("---")
                     st.markdown("**🩺 Latest Observation:**")
                     if obs_text and str(obs_text).strip() != "":
                         st.info(obs_text)
@@ -656,6 +668,7 @@ with main_col:
                 date_display = row['date'][:19].replace('-', '/').replace(' ', ' - ')
                 with st.expander(f"{row['product_name']} ({row['type']}) - **{date_display}**"):
                     st.write(row["comment"])
+
 
 
 
