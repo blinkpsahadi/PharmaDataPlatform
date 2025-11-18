@@ -380,30 +380,23 @@ with main_col:
                     else:
                         st.write("_No recent observation recorded in the main catalog._")
                         
-     # DASHBOARD
+    # DASHBOARD
     elif menu == "📊 Dashboard":
         st.header("📊 Global Analysis")
         df = load_data()
         
         # --- Data Preparation: Cleaning and Creating 'price_numeric' ---
-        # The 'price' column is often a string (sometimes with commas as decimals).
         if 'price' in df.columns:
-            # Replace commas with dots and convert to numeric
             df['price_numeric'] = df['price'].astype(str).str.replace(',', '.', regex=False)
             df['price_numeric'] = pd.to_numeric(df['price_numeric'], errors='coerce')
         else:
             df['price_numeric'] = pd.NA
             st.warning("Column 'price' not found. Price analysis is skipped.")
     
-        # --- Critical Required Columns for Analysis (ATC Code removed) ---
         required_cols = ['therapeutic_class', 'type', 'source', 'price_numeric']
-        
-        # Verification of critical columns after loading
         for col in required_cols:
-            # Note: 'price_numeric' is created above, so we check if the original exists
-            if col in ['price_numeric']:
-                continue 
-            
+            if col == 'price_numeric':
+                continue
             if col not in df.columns:
                 df[col] = pd.NA
                 st.warning(f"Column '{col}' not found. Dashboard calculations might be incomplete.")
@@ -411,47 +404,54 @@ with main_col:
         if df.empty:
             st.error("Data required for the Dashboard is missing or empty.")
             st.stop()
-            
-        # --- Actual Data Loading and Calculation Function for the Dashboard ---
+    
+        # --- Actual Data Loading and Calculation Function (UPDATED) ---
         @st.cache_data
         def calculate_dashboard_data(df_products):
-            """Calculates summary DataFrames from the complete data (ATC analysis removed)."""
-            
-            # 1. Distribution by Therapeutic Class (Uses 'therapeutic_class')
+    
+            # Convert molecule names to string
+            df_products['name'] = df_products['name'].astype(str)
+    
+            # --- Molecule lists grouped by category ---
+            mol_by_class = df_products.groupby('therapeutic_class')['name'].apply(list)
+            mol_by_type = df_products.groupby('type')['name'].apply(list)
+            mol_by_source = df_products.groupby('source')['name'].apply(list)
+    
+            # 1. Therapeutic Class Distribution
             df_class_therapy = df_products.groupby('therapeutic_class', dropna=True)['name'].count().reset_index()
             df_class_therapy.columns = ['Therapeutic Class', 'Number of Molecules']
-            
-            # 2. Distribution by Type (Closest Galenic Form)
-            # Renumbered from 3
+            df_class_therapy['molecules'] = df_class_therapy['Therapeutic Class'].map(mol_by_class)
+    
+            # 2. Galenic Form Type Distribution
             df_type = df_products.groupby('type', dropna=True)['name'].count().reset_index()
             df_type.columns = ['Form Type (Galenic)', 'Number of Molecules']
             df_type = df_type.sort_values(by='Number of Molecules', ascending=False)
-            
-            # 3. Distribution by Source (Manufacturer/Data Source)
-            # Renumbered from 4
+            df_type['molecules'] = df_type['Form Type (Galenic)'].map(mol_by_type)
+    
+            # 3. Source Distribution
             df_source = df_products.groupby('source', dropna=True)['name'].count().reset_index()
             df_source.columns = ['Source (Manufacturer/Data)', 'Number of Molecules']
             df_source = df_source.sort_values(by='Number of Molecules', ascending=False)
-            
-            # 4. Average Price by Therapeutic Class (Uses 'therapeutic_class' and 'price_numeric')
-            # Renumbered from 5
-            # Exclude NaNs in 'price_numeric' for calculation
+            df_source['molecules'] = df_source['Source (Manufacturer/Data)'].map(mol_by_source)
+    
+            # 4. Average Price by Therapeutic Class
             df_price_class = df_products[df_products['price_numeric'].notna()].groupby('therapeutic_class').agg(
                 Average_Price=('price_numeric', 'mean'),
                 Total_Molecules=('name', 'count')
             ).reset_index()
             df_price_class.columns = ['Therapeutic Class', 'Average_Price', 'Total_Molecules']
-            
-            # Return only the four remaining dataframes
+            df_price_class['molecules'] = df_price_class['Therapeutic Class'].map(mol_by_class)
+    
             return df_class_therapy, df_type, df_source, df_price_class
     
-        # --- Plotly Chart Creation Functions (No changes needed here as they are generic) ---
+    
+        # --- UPDATED PLOTLY CHART FUNCTIONS ---
         PLOTLY_TEMPLATE = "streamlit"
     
         def create_pie_chart(df, names_col, values_col, title):
-            """Creates a Plotly Express Pie Chart."""
             if df.empty:
                 return None
+    
             fig = px.pie(
                 df,
                 names=names_col,
@@ -459,23 +459,28 @@ with main_col:
                 title=title,
                 hole=0.3,
                 color_discrete_sequence=px.colors.qualitative.Pastel,
-                template=PLOTLY_TEMPLATE
+                template=PLOTLY_TEMPLATE,
+                hover_data={'molecules': True}     # 👈 Added
             )
+    
+            fig.update_traces(
+                textinfo='percent+label',
+                marker=dict(line=dict(color='#FFFFFF', width=1)),
+                hovertemplate="<b>%{label}</b><br><br>Molecules:<br>%{customdata[0]}"
+            )
+    
             fig.update_layout(
                 showlegend=True,
                 margin=dict(l=20, r=20, t=50, b=20),
                 height=400,
             )
-            fig.update_traces(
-                textinfo='percent+label',  
-                marker=dict(line=dict(color='#FFFFFF', width=1))
-            )
             return fig
-        
+    
+    
         def create_bar_chart(df, x_col, y_col, color_col, title, y_title="Number of Molecules"):
-            """Creates a Plotly Express Bar Chart."""
             if df.empty:
                 return None
+    
             fig = px.bar(
                 df,
                 x=x_col,
@@ -483,9 +488,14 @@ with main_col:
                 color=color_col,
                 title=title,
                 text_auto=True,
-                color_discrete_sequence=px.colors.qualitative.Vivid,
-                template=PLOTLY_TEMPLATE
+                template=PLOTLY_TEMPLATE,
+                hover_data={'molecules': True}     # 👈 Added
             )
+    
+            fig.update_traces(
+                hovertemplate="<b>%{x}</b><br>%{y} molecules<br><br><b>Molecules:</b><br>%{customdata[0]}"
+            )
+    
             fig.update_layout(
                 xaxis_title=x_col,
                 yaxis_title=y_title,
@@ -493,28 +503,33 @@ with main_col:
                 margin=dict(l=20, r=20, t=50, b=20),
                 height=400,
             )
-            # Optimisation of label rotation if they are too long
-            fig.update_xaxes(tickangle=45, tickfont=dict(size=10)) 
-            
+    
+            fig.update_xaxes(tickangle=45, tickfont=dict(size=10))
             return fig
-        
+    
+    
         def create_price_bar_chart(df, x_col, y_col, title):
-            """Creates a bar chart for the average price."""
             if df.empty:
                 return None
+    
             fig = px.bar(
                 df,
                 x=x_col,
                 y=y_col,
                 color=x_col,
                 title=title,
-                text_auto='.2s', # Display value with 2 decimals if possible
-                color_discrete_sequence=px.colors.qualitative.Safe,
-                template=PLOTLY_TEMPLATE
+                text_auto='.2s',
+                template=PLOTLY_TEMPLATE,
+                hover_data={'molecules': True}     # 👈 Added
             )
+    
+            fig.update_traces(
+                hovertemplate="<b>%{x}</b><br>Avg Price: %{y}<br><br><b>Molecules:</b><br>%{customdata[0]}"
+            )
+    
             fig.update_layout(
                 xaxis_title=x_col,
-                yaxis_title="Average Price", # Unit not specified, but assumed to be a price
+                yaxis_title="Average Price",
                 showlegend=False,
                 margin=dict(l=20, r=20, t=50, b=20),
                 height=400,
@@ -522,85 +537,59 @@ with main_col:
             fig.update_xaxes(tickangle=45, tickfont=dict(size=10))
             return fig
     
-        
-        # --- Dashboard Section ---
-        
-        # Load actual dashboard data (ATC grouped result removed)
+    
+        # --- Dashboard Data ---
         df_class_therapy, df_type, df_source, df_price_class = calculate_dashboard_data(df)
-        
-        # Report Title
+    
         st.markdown("<h1>General Pharmaceutical Data Synthesis</h1>", unsafe_allow_html=True)
         st.write(f"Analysis of **{len(df)}** molecules as of **{date.today().strftime('%m/%d/%Y')}**.")
-        
-        
-        # ----------------------------------------------------
-        # Section 1: Chart 1 - Therapeutic Class Distribution
-        # ----------------------------------------------------
-        
+    
+        # 1. Therapeutic Class Distribution
         st.markdown("<h2>1. Therapeutic Class Distribution</h2>", unsafe_allow_html=True)
-        
-        with st.container(): # Use a container to ensure full width
+        with st.container():
             fig_class_therapy = create_pie_chart(
-                df_class_therapy, 
+                df_class_therapy,
                 names_col='Therapeutic Class',
                 values_col='Number of Molecules',
                 title="Distribution by Therapeutic Class"
             )
             if fig_class_therapy:
                 st.plotly_chart(fig_class_therapy, use_container_width=True)
-            else:
-                st.info("No data for therapeutic class distribution.")
-        
-        st.markdown("---") # Visual separator
-        
-        # ----------------------------------------------------
-        # Section 2: Chart 2 - Form Type Distribution (Renumbered from 3)
-        # ----------------------------------------------------
     
+        st.markdown("---")
+    
+        # 2. Form Type
         st.markdown("<h2>2. Top 10 Form Type (Galenic) Distributions</h2>", unsafe_allow_html=True)
-    
         with st.container():
             fig_type = create_bar_chart(
-                df_type.head(10), # Limited to top 10 for readability
-                x_col='Form Type (Galenic)', 
-                y_col='Number of Molecules', 
-                color_col='Form Type (Galenic)', 
+                df_type.head(10),
+                x_col='Form Type (Galenic)',
+                y_col='Number of Molecules',
+                color_col='Form Type (Galenic)',
                 title="Top 10 Distributions by Form Type"
             )
             if fig_type:
                 st.plotly_chart(fig_type, use_container_width=True)
-            else:
-                st.info("No data for Form Type (Galenic) distribution.")
     
-        st.markdown("---") # Visual separator
+        st.markdown("---")
     
-        # ----------------------------------------------------
-        # Section 3: Chart 3 - Source Distribution (Manufacturer) (Renumbered from 4)
-        # ----------------------------------------------------
-    
+        # 3. Source
         st.markdown("<h2>3. Top 10 Source (Manufacturer/Data) Distributions</h2>", unsafe_allow_html=True)
-        
         with st.container():
             fig_source = create_bar_chart(
-                df_source.head(10), # Limited to top 10 for readability
-                x_col='Source (Manufacturer/Data)', 
-                y_col='Number of Molecules', 
-                color_col='Source (Manufacturer/Data)', 
+                df_source.head(10),
+                x_col='Source (Manufacturer/Data)',
+                y_col='Number of Molecules',
+                color_col='Source (Manufacturer/Data)',
                 title="Top 10 Distributions by Source"
             )
             if fig_source:
                 st.plotly_chart(fig_source, use_container_width=True)
-            else:
-                st.info("No data for Source distribution.")
     
-        st.markdown("---") # Visual separator
-        
-        # ----------------------------------------------------
-        # Section 4: Chart 4 - Average Price by Therapeutic Class (Renumbered from 5)
-        # ----------------------------------------------------
-        
+        st.markdown("---")
+    
+        # 4. Average Price
         st.markdown("<h2>4. Average Price by Therapeutic Class</h2>", unsafe_allow_html=True)
-        
         with st.container():
             fig_price = create_price_bar_chart(
                 df_price_class.sort_values(by='Average_Price', ascending=False),
@@ -610,8 +599,7 @@ with main_col:
             )
             if fig_price:
                 st.plotly_chart(fig_price, use_container_width=True)
-            else:
-                st.info("No numerical price data available for price analysis.")
+    
 
     # OBSERVATIONS Page
     elif menu == "🧾 Observations":
@@ -731,5 +719,6 @@ with main_col:
                 # Title uses type and date
                 with st.expander(f"**{row['product_name']}** ({row['type']}) - *{date_display}*"):
                     st.write(row["comment"])
+
 
 
