@@ -559,46 +559,59 @@ with main_col:
         # LOAD DATA
         # =====================
         df_class_therapy, df_type, df_source, df_price_class = calculate_dashboard_data(df)
-    
+        
         st.markdown("<h1>General Pharmaceutical Data Synthesis</h1>", unsafe_allow_html=True)
         st.write(f"Analysis of **{len(df)}** molecules as of **{date.today().strftime('%m/%d/%Y')}**.")
-    
-    
+        
+        
         # 1 — Therapeutic class pie chart
         st.markdown("<h2>1. Therapeutic Class Distribution</h2>", unsafe_allow_html=True)
         fig_class_therapy = create_pie_chart(df_class_therapy, 'Therapeutic Class', 'Number of Molecules', "Distribution by Therapeutic Class")
-        st.plotly_chart(fig_class_therapy, use_container_width=True)
-    
-    
+        if fig_class_therapy:
+            st.plotly_chart(fig_class_therapy, use_container_width=True)
+        else:
+            st.info("No data available to display the Therapeutic Class distribution.")
+        
+        
         st.markdown("---")
-    
-    
+        
+        
         # 2 — Type/Galenic form
         st.markdown("<h2>2. Top 10 Form Type (Galenic) Distributions</h2>", unsafe_allow_html=True)
         fig_type = create_bar_chart(df_type.head(10), 'Form Type (Galenic)', 'Number of Molecules', 'Form Type (Galenic)', "Top 10 Distributions by Form Type")
-        st.plotly_chart(fig_type, use_container_width=True)
-    
-    
+        if fig_type:
+            st.plotly_chart(fig_type, use_container_width=True)
+        else:
+            st.info("No data available to display Form Type distributions.")
+        
+        
         st.markdown("---")
-    
-    
+        
+        
         # 3 — Source/Manufacturer
         st.markdown("<h2>3. Top 10 Source (Manufacturer/Data) Distributions</h2>", unsafe_allow_html=True)
         fig_source = create_bar_chart(df_source.head(10), 'Source (Manufacturer/Data)', 'Number of Molecules', 'Source (Manufacturer/Data)', "Top 10 Distributions by Source")
-        st.plotly_chart(fig_source, use_container_width=True)
-    
-    
+        if fig_source:
+            st.plotly_chart(fig_source, use_container_width=True)
+        else:
+            st.info("No data available to display Source distributions.")
+        
+        
         st.markdown("---")
-    
-    
+        
+        
         # 4 — Price by therapeutic class
         st.markdown("<h2>4. Average Price by Therapeutic Class</h2>", unsafe_allow_html=True)
+        # If df_price_class is empty, create_price_bar_chart will return None — guard it
         fig_price = create_price_bar_chart(
-            df_price_class.sort_values(by='Average_Price', ascending=False),
+            df_price_class.sort_values(by='Average_Price', ascending=False) if not df_price_class.empty else df_price_class,
             'Therapeutic Class', 'Average_Price', "Average Price by Therapeutic Class"
         )
-        st.plotly_chart(fig_price, use_container_width=True)
-    
+        if fig_price:
+            st.plotly_chart(fig_price, use_container_width=True)
+        else:
+            st.info("No numerical price data available for price analysis.")
+
 
     # OBSERVATIONS Page
     elif menu == "🧾 Observations":
@@ -718,6 +731,7 @@ with main_col:
                 # Title uses type and date
                 with st.expander(f"**{row['product_name']}** ({row['type']}) - *{date_display}*"):
                     st.write(row["comment"])
+
 
 
 
